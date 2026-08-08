@@ -28,7 +28,8 @@ export default function DashboardClient() {
   const [signals, setSignals] = useState<TickerSignal[]>([]);
   const [topBuys, setTopBuys] = useState<Transaction[]>([]);
   const [totalInsidersTracked, setTotalInsidersTracked] = useState(0);
-  const [previousPeriodValueUsd, setPreviousPeriodValueUsd] = useState<number | null>(null);
+  const [currentMonthValueUsd, setCurrentMonthValueUsd] = useState<number | null>(null);
+  const [previousMonthValueUsd, setPreviousMonthValueUsd] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
@@ -64,7 +65,8 @@ export default function DashboardClient() {
         setSignals(body.signals);
         setTopBuys(body.topBuys);
         setTotalInsidersTracked(body.totalInsidersTracked ?? 0);
-        setPreviousPeriodValueUsd(body.previousPeriodValueUsd ?? null);
+        setCurrentMonthValueUsd(body.currentMonthValueUsd ?? null);
+        setPreviousMonthValueUsd(body.previousMonthValueUsd ?? null);
         setUpdatedAt(new Date());
       })
       .catch((err: unknown) => {
@@ -122,7 +124,8 @@ export default function DashboardClient() {
         signals={signals}
         totalInsidersTracked={totalInsidersTracked}
         windowDays={filters.windowDays}
-        previousPeriodValueUsd={previousPeriodValueUsd}
+        currentMonthValueUsd={currentMonthValueUsd}
+        previousMonthValueUsd={previousMonthValueUsd}
       />
       <DashboardLayout
         topBuys={topBuys}

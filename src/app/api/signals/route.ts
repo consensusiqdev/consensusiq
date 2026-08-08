@@ -31,13 +31,21 @@ export async function GET(request: NextRequest) {
   const buysOnly = params.get("buysOnly") !== "false";
 
   try {
-    const windowStart = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    // Fetches two windows' worth (current + the immediately preceding, equal-length one) in a
-    // single query, so the KPI row can show "vs. vorheriger Zeitraum" without a second round trip.
-    const previousWindowStart = new Date(Date.now() - windowDays * 2 * 24 * 60 * 60 * 1000)
+    const now = new Date();
+    const windowStart = new Date(now.getTime() - windowDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    // Calendar-month boundaries for the KPI row's "vs. letzten Monat" comparison — fixed and
+    // filter-independent (unlike the windowDays-based signal list), so it reads the same no
+    // matter which Beobachtungszeitraum is selected.
+    const currentMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
       .toISOString()
       .slice(0, 10);
-    const rows = await getTransactionsSince(previousWindowStart);
+    const previousMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
+      .toISOString()
+      .slice(0, 10);
+    // Fetches everything back to the earlier of (windowStart, previousMonthStart) in one query —
+    // covers both the main signal list and the month-over-month comparison without a second round trip.
+    const fetchStart = windowStart < previousMonthStart ? windowStart : previousMonthStart;
+    const rows = await getTransactionsSince(fetchStart);
 
     // Includes every tracked code (open-market trades + compensation-related events like grants/
     // exercises) — only used here to build `filers`/`topBuys`/signals off the open-market subset
@@ -74,12 +82,18 @@ export async function GET(request: NextRequest) {
       (t) => (t.transactionCode === "P" || t.transactionCode === "S") && !t.nearOffering
     );
     const currentOpenMarket = openMarketOnly.filter((t) => t.filedDate >= windowStart);
-    const previousOpenMarket = openMarketOnly.filter((t) => t.filedDate < windowStart);
+    const thisMonthOpenMarket = openMarketOnly.filter((t) => t.filedDate >= currentMonthStart);
+    const lastMonthOpenMarket = openMarketOnly.filter(
+      (t) => t.filedDate >= previousMonthStart && t.filedDate < currentMonthStart
+    );
 
     const transactions = buysOnly ? currentOpenMarket.filter((t) => t.side === "BUY") : currentOpenMarket;
-    const previousTransactions = buysOnly
-      ? previousOpenMarket.filter((t) => t.side === "BUY")
-      : previousOpenMarket;
+    const thisMonthTransactions = buysOnly
+      ? thisMonthOpenMarket.filter((t) => t.side === "BUY")
+      : thisMonthOpenMarket;
+    const lastMonthTransactions = buysOnly
+      ? lastMonthOpenMarket.filter((t) => t.side === "BUY")
+      : lastMonthOpenMarket;
 
     const filers = summarizeFilers(transactions);
     const allSignals = computeConsensus(transactions, minUsd);
@@ -92,15 +106,19 @@ export async function GET(request: NextRequest) {
     // grant isn't a "buy" worth highlighting here.
     const topBuys = topBuyTransactions(currentOpenMarket);
 
-    // Same pipeline (minUsd/minAgree/buysOnly-filtered) run on the immediately preceding,
-    // equal-length window — powers the KPI row's "vs. vorheriger Zeitraum" deltas. Only the
-    // aggregate volume is needed here, not per-ticker detail.
-    const previousSignals = filterAndSortConsensus(
-      computeConsensus(previousTransactions, minUsd),
+    // Same pipeline (minUsd/minAgree/buysOnly-filtered) run on this and last calendar month —
+    // powers the KPI row's "vs. letzten Monat" delta. Only the aggregate volume is needed here,
+    // not per-ticker detail.
+    const currentMonthValueUsd = filterAndSortConsensus(
+      computeConsensus(thisMonthTransactions, minUsd),
       minAgree,
       sortBy
-    );
-    const previousPeriodValueUsd = previousSignals.reduce((sum, s) => sum + s.totalValueAll, 0);
+    ).reduce((sum, s) => sum + s.totalValueAll, 0);
+    const previousMonthValueUsd = filterAndSortConsensus(
+      computeConsensus(lastMonthTransactions, minUsd),
+      minAgree,
+      sortBy
+    ).reduce((sum, s) => sum + s.totalValueAll, 0);
 
     if (await getActiveSubscriberId()) {
       await enrichSignalsWithAcquisitionHistory(signals);
@@ -111,7 +129,8 @@ export async function GET(request: NextRequest) {
       signals,
       topBuys,
       totalInsidersTracked: await getTotalInsiderPositionsCount(),
-      previousPeriodValueUsd,
+      currentMonthValueUsd,
+      previousMonthValueUsd,
     });
   } catch (err) {
     console.error("GET /api/signals failed:", err);

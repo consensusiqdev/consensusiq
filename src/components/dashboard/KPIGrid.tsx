@@ -9,20 +9,21 @@ function newSignalsToday(signals: TickerSignal[]): number {
   return signals.filter((s) => s.consensusSince === today).length;
 }
 
-function volumeDelta(current: number, previous: number | null): Delta {
-  if (previous == null) return null;
-  if (previous === 0) {
-    // No data at all in the comparison window (e.g. near the start of data collection, or a
-    // long windowDays pushing the prior period before any tracked history) — a % change is
+// Always "this calendar month vs. last calendar month" — fixed and independent of the
+// Beobachtungszeitraum filter, so the label means the same thing no matter what's selected.
+function volumeDelta(currentMonth: number, previousMonth: number | null): Delta {
+  if (previousMonth == null) return null;
+  if (previousMonth === 0) {
+    // No data at all last month (e.g. near the start of data collection) — a % change is
     // undefined here, so show the actual new amount instead of a meaningless "∞%".
-    return current > 0
-      ? { text: `+${fmtUsd(current)} neu ggü. Vorperiode`, positive: true }
+    return currentMonth > 0
+      ? { text: `+${fmtUsd(currentMonth)} ggü. letztem Monat (neu)`, positive: true }
       : null;
   }
-  const pct = ((current - previous) / previous) * 100;
+  const pct = ((currentMonth - previousMonth) / previousMonth) * 100;
   if (Math.abs(pct) < 0.5) return null;
   const sign = pct > 0 ? "↑" : "↓";
-  return { text: `${sign} ${Math.abs(pct).toFixed(1)}% vs. vorheriger Zeitraum`, positive: pct > 0 };
+  return { text: `${sign} ${Math.abs(pct).toFixed(1)}% ggü. letztem Monat`, positive: pct > 0 };
 }
 
 export default function KPIGrid({
@@ -30,20 +31,22 @@ export default function KPIGrid({
   signals,
   totalInsidersTracked,
   windowDays,
-  previousPeriodValueUsd,
+  currentMonthValueUsd,
+  previousMonthValueUsd,
 }: {
   filers: FilerSummary[];
   signals: TickerSignal[];
   totalInsidersTracked: number;
   windowDays: number;
-  previousPeriodValueUsd: number | null;
+  currentMonthValueUsd: number | null;
+  previousMonthValueUsd: number | null;
 }) {
   const totalValue = signals.reduce((sum, s) => sum + s.totalValueAll, 0);
   const topSignalScore = signals.length > 0 ? Math.max(...signals.map((s) => s.signalScore)) : null;
 
   const todayCount = newSignalsToday(signals);
   const signalsDelta: Delta = todayCount > 0 ? { text: `↑ ${todayCount} heute`, positive: true } : null;
-  const volumeDeltaInfo = volumeDelta(totalValue, previousPeriodValueUsd);
+  const volumeDeltaInfo = volumeDelta(currentMonthValueUsd ?? 0, previousMonthValueUsd);
 
   const items = [
     // One combined card instead of two disconnected insider-counts — "Insider-Datenbank" is the
