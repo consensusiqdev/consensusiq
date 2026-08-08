@@ -32,7 +32,12 @@ export async function GET(request: NextRequest) {
 
   try {
     const windowStart = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const rows = await getTransactionsSince(windowStart);
+    // Fetches two windows' worth (current + the immediately preceding, equal-length one) in a
+    // single query, so the KPI row can show "vs. vorheriger Zeitraum" without a second round trip.
+    const previousWindowStart = new Date(Date.now() - windowDays * 2 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    const rows = await getTransactionsSince(previousWindowStart);
 
     // Includes every tracked code (open-market trades + compensation-related events like grants/
     // exercises) — only used here to build `filers`/`topBuys`/signals off the open-market subset
@@ -68,7 +73,13 @@ export async function GET(request: NextRequest) {
     const openMarketOnly = allTransactions.filter(
       (t) => (t.transactionCode === "P" || t.transactionCode === "S") && !t.nearOffering
     );
-    const transactions = buysOnly ? openMarketOnly.filter((t) => t.side === "BUY") : openMarketOnly;
+    const currentOpenMarket = openMarketOnly.filter((t) => t.filedDate >= windowStart);
+    const previousOpenMarket = openMarketOnly.filter((t) => t.filedDate < windowStart);
+
+    const transactions = buysOnly ? currentOpenMarket.filter((t) => t.side === "BUY") : currentOpenMarket;
+    const previousTransactions = buysOnly
+      ? previousOpenMarket.filter((t) => t.side === "BUY")
+      : previousOpenMarket;
 
     const filers = summarizeFilers(transactions);
     const allSignals = computeConsensus(transactions, minUsd);
@@ -79,7 +90,17 @@ export async function GET(request: NextRequest) {
     // is showing sell-side consensus (buys are rarer, so this shouldn't be hidden by a filter
     // meant for the ticker-consensus list). Uses openMarketOnly, not allTransactions — a stock
     // grant isn't a "buy" worth highlighting here.
-    const topBuys = topBuyTransactions(openMarketOnly);
+    const topBuys = topBuyTransactions(currentOpenMarket);
+
+    // Same pipeline (minUsd/minAgree/buysOnly-filtered) run on the immediately preceding,
+    // equal-length window — powers the KPI row's "vs. vorheriger Zeitraum" deltas. Only the
+    // aggregate volume is needed here, not per-ticker detail.
+    const previousSignals = filterAndSortConsensus(
+      computeConsensus(previousTransactions, minUsd),
+      minAgree,
+      sortBy
+    );
+    const previousPeriodValueUsd = previousSignals.reduce((sum, s) => sum + s.totalValueAll, 0);
 
     if (await getActiveSubscriberId()) {
       await enrichSignalsWithAcquisitionHistory(signals);
@@ -90,6 +111,7 @@ export async function GET(request: NextRequest) {
       signals,
       topBuys,
       totalInsidersTracked: await getTotalInsiderPositionsCount(),
+      previousPeriodValueUsd,
     });
   } catch (err) {
     console.error("GET /api/signals failed:", err);

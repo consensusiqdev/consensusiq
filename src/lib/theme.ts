@@ -1,7 +1,7 @@
 export type Theme = "dark" | "light";
 
-export const THEME_STORAGE_KEY = "consensusiq-theme";
-export const THEME_CHANGE_EVENT = "consensusiq:theme-change";
+export const THEME_STORAGE_KEY = "insider-align-theme";
+export const THEME_CHANGE_EVENT = "insider-align:theme-change";
 
 export function getStoredTheme(): Theme {
   if (typeof window === "undefined") return "dark";

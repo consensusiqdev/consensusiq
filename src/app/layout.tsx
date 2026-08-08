@@ -19,7 +19,7 @@ const ibmPlexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ConsensusIQ — SEC Insider-Trading-Tracker",
+  title: "InsiderAlign — SEC Insider-Trading-Tracker",
   description:
     "Beobachtet SEC-Form-4-Insidergeschäfte und zeigt, wann mehrere Insider dieselbe Aktie kaufen oder verkaufen.",
 };

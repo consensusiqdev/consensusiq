@@ -37,7 +37,7 @@ export default function Home() {
           Worauf setzen Firmen-Insider gerade — und stimmen sie überein?
         </h1>
         <p className="mt-5 max-w-2xl text-base leading-relaxed text-text-dim">
-          ConsensusIQ wertet öffentlich gemeldete SEC-Form-4-Insidergeschäfte aus und zeigt, wann
+          InsiderAlign wertet öffentlich gemeldete SEC-Form-4-Insidergeschäfte aus und zeigt, wann
           mehrere Vorstände, Directors oder Großaktionäre unabhängig voneinander dieselbe Aktie
           kaufen oder verkaufen — samt Signal Score und Verlaufs-Historie. Komplett kostenlos,
           kein Konto nötig.

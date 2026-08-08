@@ -49,10 +49,10 @@ export default function ImpressumPage() {
           <section>
             <h2 className="mb-1 font-semibold text-text">Haftungshinweis</h2>
             <p>
-              Alle auf ConsensusIQ dargestellten Daten stammen aus der öffentlich zugänglichen
+              Alle auf InsiderAlign dargestellten Daten stammen aus der öffentlich zugänglichen
               SEC-EDGAR-API (sec.gov) und werden ohne Gewähr für Richtigkeit, Vollständigkeit oder
               Aktualität bereitgestellt. Es handelt sich nicht um Finanz- oder Anlageberatung.
-              ConsensusIQ steht in keiner Verbindung zur SEC.
+              InsiderAlign steht in keiner Verbindung zur SEC.
             </p>
           </section>
         </div>

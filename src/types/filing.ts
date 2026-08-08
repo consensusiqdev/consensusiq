@@ -144,6 +144,9 @@ export type TickerSignal = {
   leadCount: number;
   leadSide: TransactionSide;
   convictionRatio: number;
+  dollarWeightedRatio: number;
+  avgHoldingsPct: number;
+  sideMultiplier: number;
   totalValueAll: number;
   observedTopN: number;
   signalScore: number;

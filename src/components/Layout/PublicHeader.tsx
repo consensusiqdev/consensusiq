@@ -13,7 +13,7 @@ export default function PublicHeader() {
           href="/"
           className="font-mono text-sm font-semibold uppercase tracking-[0.14em] text-accent"
         >
-          ConsensusIQ
+          InsiderAlign
         </Link>
 
         <nav className="flex items-center gap-5 font-mono text-[13px] text-text-dim">

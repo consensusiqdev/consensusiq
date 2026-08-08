@@ -63,7 +63,7 @@ export async function sendWatchlistAlertEmail(to: string, transactions: Transact
         <tbody>${transactions.map(renderTransactionRow).join("")}</tbody>
       </table>
       <p style="margin-top:20px;font-size:11px;color:#a1a1a6;">
-        Du bekommst diese E-Mail, weil du ${tickers.join(", ")} auf deiner ConsensusIQ-Watchlist hast.
+        Du bekommst diese E-Mail, weil du ${tickers.join(", ")} auf deiner InsiderAlign-Watchlist hast.
         Verwalten: <a href="${process.env.NEXT_PUBLIC_APP_URL}/watchlist" style="color:#b8791f;">Watchlist ansehen</a>.
         Keine Finanzberatung.
       </p>

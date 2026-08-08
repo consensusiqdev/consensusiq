@@ -32,7 +32,7 @@ export default function DashboardPage() {
             wird zusätzlich mit ×1,15 gewichtet, Verkauf-geführter mit ×0,85. Diese Einordnung
             wurde nicht in Übereinstimmung mit den Rechtsvorschriften zur Förderung der
             Unabhängigkeit von Finanzanalysen erstellt und unterliegt keinem Verbot des Handels
-            vor ihrer Verbreitung. ConsensusIQ und sein Betreiber halten keine Positionen in den
+            vor ihrer Verbreitung. InsiderAlign und sein Betreiber halten keine Positionen in den
             hier genannten Wertpapieren und erhalten keine Vergütung von den genannten
             Unternehmen. <Link href="/methodik" className="text-accent hover:underline">Ausführliche Methodik →</Link>
           </p>

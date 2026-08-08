@@ -14,6 +14,66 @@ function scoreTierClass(score: number): string {
   return "border-border text-text-faint";
 }
 
+/** Breaks the 0-100 signalScore back down into its three equally-weighted thirds plus the
+ *  buy/sell multiplier — mirrors the exact math in consensus.ts's summarizeTickers(). */
+function scoreBreakdown(signal: TickerSignal) {
+  const third = 100 / 3;
+  const headcountPts = signal.convictionRatio * third;
+  const dollarPts = signal.dollarWeightedRatio * third;
+  const holdingsPts = signal.avgHoldingsPct * third;
+  const rawScore = headcountPts + dollarPts + holdingsPts;
+  const afterMultiplier = rawScore * signal.sideMultiplier;
+  return { headcountPts, dollarPts, holdingsPts, rawScore, afterMultiplier };
+}
+
+function ScoreTooltip({ signal }: { signal: TickerSignal }) {
+  const { headcountPts, dollarPts, holdingsPts, rawScore, afterMultiplier } = scoreBreakdown(signal);
+  const multiplierLabel =
+    signal.leadSide === "BUY"
+      ? `× ${signal.sideMultiplier.toFixed(2)} (kaufgeführter Konsens)`
+      : `× ${signal.sideMultiplier.toFixed(2)} (verkaufgeführter Konsens)`;
+  const wasClamped = afterMultiplier !== signal.signalScore && (afterMultiplier > 100 || afterMultiplier < 0);
+
+  return (
+    <div
+      role="tooltip"
+      className="pointer-events-none absolute left-1/2 top-full z-30 mt-2 hidden w-64 -translate-x-1/2 rounded-lg border border-border bg-bg-panel-2 p-3 font-mono text-[11px] leading-relaxed text-text-dim shadow-lg group-hover:block"
+    >
+      <div className="mb-2 flex items-baseline justify-between text-text">
+        <span className="text-[10px] uppercase tracking-wide text-text-faint">Signal Score</span>
+        <span className="text-[13px] font-bold">{signal.signalScore}</span>
+      </div>
+
+      <div className="flex justify-between">
+        <span>Kopfzahl-Anteil</span>
+        <span className="text-text">+{headcountPts.toFixed(1)}</span>
+      </div>
+      <div className="flex justify-between">
+        <span>Dollar-Anteil</span>
+        <span className="text-text">+{dollarPts.toFixed(1)}</span>
+      </div>
+      <div className="flex justify-between">
+        <span>Ø Altbestand gehandelt</span>
+        <span className="text-text">+{holdingsPts.toFixed(1)}</span>
+      </div>
+
+      <div className="mt-1.5 flex justify-between border-t border-dashed border-border pt-1.5">
+        <span>Basiswert</span>
+        <span className="text-text">{rawScore.toFixed(1)}</span>
+      </div>
+      <div className="flex justify-between">
+        <span>{multiplierLabel}</span>
+        <span className="text-text">{afterMultiplier.toFixed(1)}</span>
+      </div>
+
+      <div className="mt-1.5 flex justify-between border-t border-border pt-1.5 text-text">
+        <span className="font-semibold">Signal Score{wasClamped ? " (gedeckelt)" : ""}</span>
+        <span className="font-bold">{signal.signalScore}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function TickerCard({
   signal,
   onSelectTicker,
@@ -33,7 +93,7 @@ export default function TickerCard({
       <div className="flex items-start justify-between gap-3.5">
         <div className="flex items-start gap-2.5">
           <div
-            className={`flex shrink-0 flex-col items-center justify-center rounded-md border px-2 py-1 ${scoreTierClass(signal.signalScore)}`}
+            className={`group relative flex shrink-0 flex-col items-center justify-center rounded-md border px-2 py-1 ${scoreTierClass(signal.signalScore)}`}
           >
             <span className="font-mono text-[15px] font-bold leading-none">
               {signal.signalScore}
@@ -41,6 +101,7 @@ export default function TickerCard({
             <span className="mt-0.5 font-mono text-[8px] uppercase leading-none tracking-wide">
               Score
             </span>
+            <ScoreTooltip signal={signal} />
           </div>
 
           <a

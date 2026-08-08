@@ -3,9 +3,9 @@ import Link from "next/link";
 import TopBar from "@/components/Layout/TopBar";
 
 export const metadata: Metadata = {
-  title: "Methodik | ConsensusIQ",
+  title: "Methodik | InsiderAlign",
   description:
-    "Wie ConsensusIQ den Signal Score berechnet, welche Daten einfließen und die gesetzlichen Pflichtangaben nach Art. 20 EU-Marktmissbrauchsverordnung.",
+    "Wie InsiderAlign den Signal Score berechnet, welche Daten einfließen und die gesetzlichen Pflichtangaben nach Art. 20 EU-Marktmissbrauchsverordnung.",
 };
 
 export default function MethodikPage() {
@@ -26,7 +26,7 @@ export default function MethodikPage() {
               Alle Transaktionsdaten stammen direkt von der öffentlichen SEC-EDGAR-API (sec.gov).
               Form-4-Meldungen von Vorständen, Directors und Großaktionären (10 %+ Beteiligung)
               sind gesetzlich vorgeschriebene Offenlegungen nach Section 16 des Securities Exchange
-              Act und ohnehin öffentlich einsehbar — ConsensusIQ aggregiert und ordnet sie nur ein,
+              Act und ohnehin öffentlich einsehbar — InsiderAlign aggregiert und ordnet sie nur ein,
               erhebt keine eigenen Daten. Zwischen dem eigentlichen Handel und der Veröffentlichung
               der Meldung liegen typischerweise rund zwei Werktage; die auf dem Dashboard gezeigten
               Signale spiegeln also offengelegten Handel wider, nicht Echtzeit-Transaktionen.
@@ -75,7 +75,7 @@ export default function MethodikPage() {
           <section>
             <h3 className="text-[15px] font-semibold text-text">Institutionelle 13F-Daten</h3>
             <p className="mt-2">
-              Zusätzlich beobachtet ConsensusIQ die quartalsweisen SEC-Form-13F-Meldungen von 10
+              Zusätzlich beobachtet InsiderAlign die quartalsweisen SEC-Form-13F-Meldungen von 10
               ausgewählten &bdquo;Smart Money&ldquo;-Fonds (u. a. Berkshire Hathaway, Renaissance
               Technologies, Citadel Advisors, ARK, Pershing Square) — nicht das gesamte Universum
               der ca. 5.000+ 13F-Pflichtigen. Positions-Änderungen werden quartalsweise verglichen:
@@ -96,7 +96,7 @@ export default function MethodikPage() {
               (EU) 2016/958): Herausgeber ist [Name/Firma, siehe Impressum]. Diese Einordnung wurde
               nicht in Übereinstimmung mit den Rechtsvorschriften zur Förderung der Unabhängigkeit
               von Finanzanalysen erstellt und unterliegt keinem Verbot des Handels vor ihrer
-              Verbreitung. ConsensusIQ und sein Betreiber halten keine Positionen in den hier
+              Verbreitung. InsiderAlign und sein Betreiber halten keine Positionen in den hier
               genannten Wertpapieren und erhalten keine Vergütung von den genannten Unternehmen.
             </p>
           </section>
@@ -106,7 +106,7 @@ export default function MethodikPage() {
             <p className="mt-2 font-mono text-[12.5px] leading-relaxed">
               Vergangenes Insiderverhalten ist keine Garantie für künftige Kursentwicklung. Alle
               Angaben ohne Gewähr für Richtigkeit, Vollständigkeit oder Aktualität. Keine
-              Finanzberatung. ConsensusIQ steht in keiner Verbindung zur SEC.
+              Finanzberatung. InsiderAlign steht in keiner Verbindung zur SEC.
             </p>
           </section>
 

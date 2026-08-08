@@ -59,7 +59,7 @@ export default function DatenschutzPage() {
               <strong className="text-text-dim">Nutzungsdaten:</strong> Serverseitig speichern wir
               die von dir gewählten Dashboard-Filter nicht dauerhaft personenbezogen. Die
               angezeigten Insider-Transaktionsdaten stammen ausschließlich aus der öffentlichen
-              SEC-EDGAR-API und betreffen keine ConsensusIQ-Nutzer.
+              SEC-EDGAR-API und betreffen keine InsiderAlign-Nutzer.
             </p>
           </section>
 

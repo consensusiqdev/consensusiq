@@ -7,7 +7,7 @@ import { fmtDate, fmtShares, fmtUsd } from "@/lib/format";
 import type { FundOverview } from "@/types/filing";
 
 export const metadata: Metadata = {
-  title: "Institutionelle Investoren — 13F-Holdings | ConsensusIQ",
+  title: "Institutionelle Investoren — 13F-Holdings | InsiderAlign",
   description:
     "Die letzten SEC-13F-Meldungen von 10 beobachteten \"Smart Money\"-Fonds (Berkshire Hathaway, Renaissance Technologies, Citadel, ARK u.a.) — größte Positionen pro Fonds.",
 };

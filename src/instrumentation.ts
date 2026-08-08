@@ -7,9 +7,9 @@ export async function register() {
   // start` still gets the original "just works, no external cron needed" behavior below.
   if (process.env.VERCEL) return;
 
-  const g = globalThis as unknown as { __consensusiqIngestStarted?: boolean };
-  if (g.__consensusiqIngestStarted) return;
-  g.__consensusiqIngestStarted = true;
+  const g = globalThis as unknown as { __insiderAlignIngestStarted?: boolean };
+  if (g.__insiderAlignIngestStarted) return;
+  g.__insiderAlignIngestStarted = true;
 
   const { runIngestCycle, runInstitutionalCycle, runBackfillCycle } = await import("@/lib/cronJobs");
 
