@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import type { TickerSignal } from "@/types/filing";
 import ConvictionBar from "@/components/ui/ConvictionBar";
 import Badge from "@/components/ui/Badge";
@@ -15,7 +14,13 @@ function scoreTierClass(score: number): string {
   return "border-border text-text-faint";
 }
 
-export default function TickerCard({ signal }: { signal: TickerSignal }) {
+export default function TickerCard({
+  signal,
+  onSelectTicker,
+}: {
+  signal: TickerSignal;
+  onSelectTicker: (ticker: string) => void;
+}) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -55,13 +60,16 @@ export default function TickerCard({ signal }: { signal: TickerSignal }) {
           <br />
           <b className="text-text">{fmtUsd(signal.totalValueAll)}</b>
           <br />
-          <Link
-            href={`/ticker/${encodeURIComponent(signal.ticker)}`}
-            onClick={(e) => e.stopPropagation()}
-            className="mt-1 inline-block text-[11px] text-accent hover:underline"
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelectTicker(signal.ticker);
+            }}
+            className="mt-1 text-[11px] text-accent hover:underline"
           >
             Handelshistorie →
-          </Link>
+          </button>
           <br />
           <WatchButton ticker={signal.ticker} className="mt-1 text-[11px] text-text-dim hover:text-accent" />
         </div>

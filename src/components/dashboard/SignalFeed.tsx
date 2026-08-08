@@ -1,7 +1,13 @@
 import type { TickerSignal } from "@/types/filing";
 import TickerCard from "@/components/dashboard/TickerCard";
 
-export default function SignalFeed({ signals }: { signals: TickerSignal[] }) {
+export default function SignalFeed({
+  signals,
+  onSelectTicker,
+}: {
+  signals: TickerSignal[];
+  onSelectTicker: (ticker: string) => void;
+}) {
   return (
     <section className="rounded-xl border border-border bg-bg-panel p-4">
       <div className="flex items-baseline justify-between">
@@ -22,7 +28,9 @@ export default function SignalFeed({ signals }: { signals: TickerSignal[] }) {
             kleineren Mindest-Transaktionswert.
           </div>
         ) : (
-          signals.map((s) => <TickerCard key={s.ticker} signal={s} />)
+          signals.map((s) => (
+            <TickerCard key={s.ticker} signal={s} onSelectTicker={onSelectTicker} />
+          ))
         )}
       </div>
     </section>
