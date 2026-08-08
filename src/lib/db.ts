@@ -266,6 +266,22 @@ export async function getInstitutionalActivity(ticker: string): Promise<Institut
   return result.rows as unknown as InstitutionalHoldingRow[];
 }
 
+export type FundHoldingRow = {
+  ticker: string | null;
+  issuer_name: string;
+  shares: number | null;
+  value_usd: number | null;
+};
+
+const fundHoldingsSql = `SELECT ticker, issuer_name, shares, value_usd
+   FROM institutional_holdings WHERE fund_cik = ? AND quarter = ? ORDER BY value_usd DESC`;
+
+/** Every position a fund reported for one quarter (all of it, not just top N) — the /institutional overview page sorts/slices/sums this itself. */
+export async function getFundHoldings(fundCik: string, quarter: string): Promise<FundHoldingRow[]> {
+  const result = await client.execute({ sql: fundHoldingsSql, args: [fundCik, quarter] });
+  return result.rows as unknown as FundHoldingRow[];
+}
+
 const fundLatestQuarterSql = `SELECT fund_cik, MAX(quarter) as quarter FROM institutional_holdings GROUP BY fund_cik`;
 
 /** Most recent quarter we have ANY holding on record for, per fund — lexicographic "YYYY-QN" comparison works since it sorts chronologically. Used to detect a fund closing a position (present in an older quarter, absent from its latest filing). */

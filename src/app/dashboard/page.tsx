@@ -1,3 +1,4 @@
+import Link from "next/link";
 import TopBar from "@/components/Layout/TopBar";
 import DashboardClient from "@/components/dashboard/DashboardClient";
 
@@ -33,7 +34,7 @@ export default function DashboardPage() {
             Unabhängigkeit von Finanzanalysen erstellt und unterliegt keinem Verbot des Handels
             vor ihrer Verbreitung. ConsensusIQ und sein Betreiber halten keine Positionen in den
             hier genannten Wertpapieren und erhalten keine Vergütung von den genannten
-            Unternehmen.
+            Unternehmen. <Link href="/methodik" className="text-accent hover:underline">Ausführliche Methodik →</Link>
           </p>
         </footer>
       </div>

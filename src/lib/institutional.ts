@@ -3,13 +3,16 @@ import { INSTITUTIONAL_FILERS } from "@/lib/institutionalFilers";
 import { fetchLatest13F } from "@/lib/secEdgar";
 import { resolveCusipsToTickers } from "@/lib/openfigi";
 import {
+  getFundHoldings,
   getFundLatestQuarters,
   getFundQuarterFiling,
   getInstitutionalActivity,
   upsertInstitutionalHolding,
   type InstitutionalHoldingRow,
 } from "@/lib/db";
-import type { InstitutionalEvent } from "@/types/filing";
+import type { FundOverview, InstitutionalEvent } from "@/types/filing";
+
+const TOP_HOLDINGS_PER_FUND = 10;
 
 /**
  * Pulls each curated fund's latest 13F-HR, resolves CUSIPs to tickers, and upserts one row per
@@ -123,4 +126,46 @@ export async function getInstitutionalTimelineEvents(ticker: string): Promise<In
   }
 
   return events;
+}
+
+/**
+ * One card per tracked fund for the /institutional overview page: its latest 13F snapshot's top
+ * holdings by value, total portfolio value, and position count. `null` per-fund entries mean we
+ * don't have any 13F on record yet for that fund (e.g. the daily institutional cron hasn't
+ * caught up to it) — the page shows a "noch keine Daten" state for those rather than omitting them.
+ */
+export async function getInstitutionalOverview(): Promise<FundOverview[]> {
+  const fundLatestQuarters = await getFundLatestQuarters();
+
+  return Promise.all(
+    INSTITUTIONAL_FILERS.map(async (fund): Promise<FundOverview> => {
+      const quarter = fundLatestQuarters.get(fund.cik);
+      if (!quarter) return null;
+
+      const [holdings, filing] = await Promise.all([
+        getFundHoldings(fund.cik, quarter),
+        getFundQuarterFiling(fund.cik, quarter),
+      ]);
+      if (!filing) return null;
+
+      const sorted = [...holdings].sort((a, b) => (b.value_usd ?? 0) - (a.value_usd ?? 0));
+      const totalValueUsd = holdings.reduce((sum, h) => sum + (h.value_usd ?? 0), 0);
+
+      return {
+        fundCik: fund.cik,
+        fundName: fund.name,
+        quarter,
+        filedDate: filing.filed_date,
+        sourceUrl: filing.source_url,
+        totalValueUsd,
+        positionCount: holdings.length,
+        topHoldings: sorted.slice(0, TOP_HOLDINGS_PER_FUND).map((h) => ({
+          ticker: h.ticker,
+          issuerName: h.issuer_name,
+          shares: h.shares,
+          valueUsd: h.value_usd,
+        })),
+      };
+    })
+  );
 }

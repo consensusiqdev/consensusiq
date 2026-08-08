@@ -26,6 +26,12 @@ export default function TopBar() {
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
+        <Link
+          href="/institutional"
+          className="hidden rounded-md border border-border px-3 py-2 font-mono text-[12.5px] text-text-dim hover:border-accent hover:text-text sm:inline-block"
+        >
+          Institutionell
+        </Link>
         <ThemeToggle />
 
         {isSignedIn ? (

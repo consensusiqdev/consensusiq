@@ -116,6 +116,25 @@ export type InstitutionalEvent = {
   sourceUrl: string;
 };
 
+export type FundHolding = {
+  ticker: string | null;
+  issuerName: string;
+  shares: number | null;
+  valueUsd: number | null;
+};
+
+/** One tracked "smart money" fund's latest 13F snapshot — top holdings by value, for the /institutional overview page. */
+export type FundOverview = {
+  fundCik: string;
+  fundName: string;
+  quarter: string;
+  filedDate: string;
+  sourceUrl: string;
+  totalValueUsd: number;
+  positionCount: number;
+  topHoldings: FundHolding[];
+} | null; // null when we don't have any 13F on record yet for this fund
+
 export type TickerSignal = {
   ticker: string;
   companyName: string;
