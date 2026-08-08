@@ -370,15 +370,40 @@ export async function getInsiderPositionsCount(ticker: string): Promise<number> 
   return Number((result.rows[0] as unknown as { c: number }).c);
 }
 
-const nextBackfillTickerSql = `SELECT t.ticker FROM (SELECT DISTINCT ticker FROM transactions) t
+const resumeBackfillTickerSql = `SELECT ticker FROM insider_backfill_status WHERE status = 'in_progress' LIMIT 1`;
+
+const freshBackfillTickerSql = `SELECT t.ticker FROM (SELECT DISTINCT ticker FROM transactions) t
    LEFT JOIN insider_backfill_status b ON b.ticker = t.ticker
    WHERE b.ticker IS NULL LIMIT 1`;
 
-/** One not-yet-backfilled ticker at a time — the slow historical-insider-history crawl processes a single company per cycle, never a bulk sweep. */
+/** A ticker to work on this cycle — resumes an already-started (but not yet fully processed)
+ * ticker before picking a fresh one, so a large company's backfill finishes across several
+ * cycles instead of a new ticker cutting in line every time. */
 export async function getNextBackfillTicker(): Promise<string | null> {
-  const result = await client.execute(nextBackfillTickerSql);
-  const row = result.rows[0] as unknown as { ticker: string } | undefined;
-  return row?.ticker ?? null;
+  const resuming = await client.execute(resumeBackfillTickerSql);
+  const resumingRow = resuming.rows[0] as unknown as { ticker: string } | undefined;
+  if (resumingRow) return resumingRow.ticker;
+
+  const fresh = await client.execute(freshBackfillTickerSql);
+  const freshRow = fresh.rows[0] as unknown as { ticker: string } | undefined;
+  return freshRow?.ticker ?? null;
+}
+
+const backfillProgressSql = `SELECT processed_count FROM insider_backfill_status WHERE ticker = ?`;
+
+/** How many of the ticker's historical filings have already been processed across prior cycles — 0 if this is its first cycle. */
+export async function getBackfillProgress(ticker: string): Promise<number> {
+  const result = await client.execute({ sql: backfillProgressSql, args: [ticker] });
+  const row = result.rows[0] as unknown as { processed_count: number } | undefined;
+  return row ? Number(row.processed_count) : 0;
+}
+
+const updateBackfillProgressSql = `INSERT INTO insider_backfill_status (ticker, status, processed_count) VALUES (?, 'in_progress', ?)
+   ON CONFLICT(ticker) DO UPDATE SET status = 'in_progress', processed_count = excluded.processed_count`;
+
+/** Records partial progress on a ticker whose historical backfill spans multiple cycles (batched to stay under the external scheduler's 30s request timeout). */
+export async function updateBackfillProgress(ticker: string, processedCount: number): Promise<void> {
+  await client.execute({ sql: updateBackfillProgressSql, args: [ticker, processedCount] });
 }
 
 const markBackfillSql = `INSERT INTO insider_backfill_status (ticker, status, completed_at) VALUES (?, 'done', ?)

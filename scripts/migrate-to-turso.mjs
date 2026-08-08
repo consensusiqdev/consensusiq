@@ -103,7 +103,8 @@ const SCHEMA_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS insider_backfill_status (
     ticker TEXT PRIMARY KEY,
     status TEXT NOT NULL,
-    completed_at INTEGER
+    completed_at INTEGER,
+    processed_count INTEGER NOT NULL DEFAULT 0
   )`,
 ];
 

@@ -51,11 +51,13 @@ export async function runInstitutionalCycle(): Promise<void> {
   );
 }
 
-/** The 3-min cycle: one ticker's full historical Form 3/4/5 insider backfill. */
-export async function runBackfillCycle(): Promise<{ ticker: string | null; processed: number }> {
+/** The 3-min cycle: one batch of a ticker's Form 3/4/5 insider backfill (may span multiple cycles for large companies). */
+export async function runBackfillCycle(): Promise<{ ticker: string | null; processed: number; done: boolean }> {
   const result = await backfillNextTicker();
   if (result.ticker) {
-    console.log(`[insiderPositions] Backfill ${result.ticker}: ${result.processed} Meldungen verarbeitet`);
+    console.log(
+      `[insiderPositions] Backfill ${result.ticker}: ${result.processed} Meldungen verarbeitet${result.done ? " (fertig)" : " (wird fortgesetzt)"}`
+    );
   }
   return result;
 }

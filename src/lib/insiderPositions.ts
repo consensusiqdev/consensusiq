@@ -4,7 +4,19 @@ import {
   fetchOwnershipPosition,
   fetchRecentForm3Accessions,
 } from "@/lib/secEdgar";
-import { getNextBackfillTicker, markBackfillDone, upsertInsiderPosition } from "@/lib/db";
+import {
+  getBackfillProgress,
+  getNextBackfillTicker,
+  markBackfillDone,
+  updateBackfillProgress,
+  upsertInsiderPosition,
+} from "@/lib/db";
+
+// Caps how many filings one backfill cycle fetches — the external scheduler (cron-job.org, free
+// tier) hard-times-out any request at 30s, and a company can have 50-200+ historical filings, far
+// more than fits in that budget. At ~120ms SEC throttle + network latency per filing, 15 stays
+// comfortably inside 30s even on a slow run.
+const BACKFILL_BATCH_SIZE = 15;
 
 function sourceTypeForForm(form: string): "FORM3" | "FORM4" | "FORM5" {
   if (form === "3") return "FORM3";
@@ -45,19 +57,25 @@ export async function ingestNewForm3Positions(): Promise<{ processed: number }> 
 }
 
 /**
- * The slow catch-up crawl: one not-yet-backfilled ticker per call, its *entire* Form 3/4/5 history
- * (not just what we've observed since we started tracking). Deliberately one company at a time —
- * a company can have 50-200+ historical insider filings, and this shares the same SEC fetch
- * throttle as every other loop, so spreading the work out avoids hammering SEC in one burst.
+ * The slow catch-up crawl: works through one not-yet-backfilled ticker's *entire* Form 3/4/5
+ * history (not just what we've observed since we started tracking), in batches of
+ * `BACKFILL_BATCH_SIZE` filings per cycle — a company can have 50-200+ historical filings, far
+ * more than fits in one cycle's time budget, so a large ticker resumes across several cycles
+ * (tracked via `processed_count` in `insider_backfill_status`) instead of doing it all at once.
  */
-export async function backfillNextTicker(): Promise<{ ticker: string | null; processed: number }> {
+export async function backfillNextTicker(): Promise<{ ticker: string | null; processed: number; done: boolean }> {
   const ticker = await getNextBackfillTicker();
-  if (!ticker) return { ticker: null, processed: 0 };
+  if (!ticker) return { ticker: null, processed: 0, done: false };
 
+  const alreadyProcessed = await getBackfillProgress(ticker);
   let processed = 0;
+  let done = false;
+
   try {
     const filings = await fetchFilingsByForm(ticker, ["3", "4", "5"]);
-    for (const filing of filings) {
+    const batch = filings.slice(alreadyProcessed, alreadyProcessed + BACKFILL_BATCH_SIZE);
+
+    for (const filing of batch) {
       try {
         const position = await fetchOwnershipPosition(filing.cik, filing.accessionNumber);
         if (!position) continue;
@@ -76,11 +94,23 @@ export async function backfillNextTicker(): Promise<{ ticker: string | null; pro
         console.warn(`[insiderPositions] Backfill ${ticker} ${filing.accessionNumber} fehlgeschlagen:`, err);
       }
     }
-  } finally {
-    // Mark done even on partial failure — a ticker with a few unparseable old filings shouldn't
-    // block forever and keep getting re-picked every cycle instead of moving on to the next one.
+
+    const newProcessedCount = alreadyProcessed + batch.length;
+    if (newProcessedCount >= filings.length) {
+      // Mark done even if some individual filings failed above — a ticker with a few
+      // unparseable old filings shouldn't block forever and keep getting re-picked.
+      await markBackfillDone(ticker);
+      done = true;
+    } else {
+      await updateBackfillProgress(ticker, newProcessedCount);
+    }
+  } catch (err) {
+    // Couldn't even fetch the filings list — mark done anyway so a permanently-broken ticker
+    // doesn't get re-picked forever instead of the queue moving on.
+    console.warn(`[insiderPositions] Backfill ${ticker} Filing-Liste fehlgeschlagen:`, err);
     await markBackfillDone(ticker);
+    done = true;
   }
 
-  return { ticker, processed };
+  return { ticker, processed, done };
 }
