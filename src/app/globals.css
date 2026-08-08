@@ -1,0 +1,85 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #0b0d10;
+  --bg-panel: #13161b;
+  --bg-panel-2: #181c23;
+  --bg-hover: #1e232b;
+  --border: #262b33;
+  --border-soft: #1b1f26;
+  --text: #e7e9ec;
+  --text-dim: #8b939f;
+  --text-faint: #565d68;
+  --accent: #e3a63e;
+  --accent-soft: rgba(227, 166, 62, 0.13);
+  --yes: #35c488;
+  --yes-soft: rgba(53, 196, 136, 0.14);
+  --no: #e1615b;
+  --no-soft: rgba(225, 97, 91, 0.14);
+  --alt1: #6c8eef;
+  --alt2: #b27fe0;
+  color-scheme: dark;
+}
+
+/* Apple-esque light theme — same structure/hues as the dark palette, re-tuned for contrast on white. */
+:root[data-theme="light"] {
+  --bg: #f5f5f7;
+  --bg-panel: #ffffff;
+  --bg-panel-2: #f0f0f2;
+  --bg-hover: #e8e8ea;
+  --border: #d2d2d7;
+  --border-soft: #e5e5e7;
+  --text: #1d1d1f;
+  --text-dim: #6e6e73;
+  --text-faint: #a1a1a6;
+  --accent: #b8791f;
+  --accent-soft: rgba(184, 121, 31, 0.12);
+  --yes: #1f9d6b;
+  --yes-soft: rgba(31, 157, 107, 0.12);
+  --no: #d0463f;
+  --no-soft: rgba(208, 70, 63, 0.12);
+  --alt1: #3a63d1;
+  --alt2: #8c4fc4;
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-panel: var(--bg-panel);
+  --color-bg-panel-2: var(--bg-panel-2);
+  --color-bg-hover: var(--bg-hover);
+  --color-border: var(--border);
+  --color-border-soft: var(--border-soft);
+  --color-text: var(--text);
+  --color-text-dim: var(--text-dim);
+  --color-text-faint: var(--text-faint);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-yes: var(--yes);
+  --color-yes-soft: var(--yes-soft);
+  --color-no: var(--no);
+  --color-no-soft: var(--no-soft);
+  --color-alt1: var(--alt1);
+  --color-alt2: var(--alt2);
+  --font-sans: var(--font-space-grotesk);
+  --font-mono: var(--font-ibm-plex-mono);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+* {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
