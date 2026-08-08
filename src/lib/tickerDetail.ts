@@ -1,19 +1,27 @@
-import { NextRequest, NextResponse } from "next/server";
+import "server-only";
+import { cache } from "react";
 import { getTickerHistory } from "@/lib/db";
 import { getInstitutionalTimelineEvents } from "@/lib/institutional";
 import { enrichTransactionsWithAcquisitionHistory } from "@/lib/premium";
 import { fetchCompanyEvents } from "@/lib/secEdgar";
-import type { Transaction } from "@/types/filing";
 import { getActiveSubscriberId } from "@/lib/subscription";
+import type { CompanyEvent, InstitutionalEvent, Transaction } from "@/types/filing";
 
-// Public endpoint — see /api/signals/route.ts for the same note (subscription is checked only
-// to gate the premium prior-acquisition enrichment, never to block access).
-export async function GET(request: NextRequest) {
-  const ticker = request.nextUrl.searchParams.get("ticker");
-  if (!ticker) {
-    return NextResponse.json({ error: "ticker fehlt" }, { status: 400 });
-  }
+export type TickerDetail = {
+  ticker: string;
+  companyName: string;
+  stats: { buyCount: number; sellCount: number; distinctFilers: number; total: number };
+  transactions: Transaction[];
+  companyEvents: CompanyEvent[];
+  institutionalEvents: InstitutionalEvent[];
+};
 
+/**
+ * Shared by `/ticker/[ticker]` and its intercepted `@modal` variant — wrapped in React's
+ * `cache()` so a page's `generateMetadata` and its render body share one fetch per request
+ * instead of hitting SEC EDGAR / Turso twice for the same ticker.
+ */
+export const getTickerDetail = cache(async (ticker: string): Promise<TickerDetail> => {
   const rows = await getTickerHistory(ticker);
   const allTransactions: Transaction[] = rows.map((r, i) => ({
     id: `${ticker}:${r.filer_id}:${r.transaction_date}:${i}`,
@@ -38,7 +46,7 @@ export async function GET(request: NextRequest) {
 
   // The visible trading-history list stays open-market-only, same reasoning as /api/signals —
   // grants/exercises aren't trading decisions and would misleadingly show up with a BUY badge.
-  // They're still in `allTransactions` in the DB and get found by the premium lookup below.
+  // They're still in `allTransactions` and get found by the premium lookup below.
   const transactions = allTransactions.filter((t) => t.transactionCode === "P" || t.transactionCode === "S");
 
   const companyName = transactions[0]?.companyName ?? allTransactions[0]?.companyName ?? ticker;
@@ -54,7 +62,7 @@ export async function GET(request: NextRequest) {
   }
 
   const companyEvents = await fetchCompanyEvents(ticker).catch((err) => {
-    console.warn(`[ticker-detail] Company-Events für ${ticker} konnten nicht geladen werden:`, err);
+    console.warn(`[tickerDetail] Company-Events für ${ticker} konnten nicht geladen werden:`, err);
     return [];
   });
 
@@ -62,15 +70,15 @@ export async function GET(request: NextRequest) {
   try {
     institutionalEvents = await getInstitutionalTimelineEvents(ticker);
   } catch (err) {
-    console.warn(`[ticker-detail] Institutionelle Aktivität für ${ticker} konnte nicht geladen werden:`, err);
+    console.warn(`[tickerDetail] Institutionelle Aktivität für ${ticker} konnte nicht geladen werden:`, err);
   }
 
-  return NextResponse.json({
+  return {
     ticker,
     companyName,
     stats: { buyCount, sellCount, distinctFilers, total: transactions.length },
     transactions: sorted,
     companyEvents,
     institutionalEvents,
-  });
-}
+  };
+});

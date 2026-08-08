@@ -3,7 +3,7 @@ import { getInsiderPositions, getInsiderPositionsCount, isBackfillComplete } fro
 
 const DEFAULT_LIMIT = 5;
 
-// Public endpoint, same reasoning as /api/signals and /api/ticker-detail — no auth gate.
+// Public endpoint, same reasoning as /api/signals — no auth gate.
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const ticker = params.get("ticker");

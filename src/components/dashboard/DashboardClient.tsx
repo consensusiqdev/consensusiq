@@ -5,7 +5,6 @@ import type { FilerSummary, TickerSignal, Transaction } from "@/types/filing";
 import FilterBar, { type DashboardFilters } from "@/components/dashboard/FilterBar";
 import KPIGrid from "@/components/dashboard/KPIGrid";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
-import TickerDetailModal from "@/components/dashboard/TickerDetailModal";
 
 const DEFAULT_FILTERS: DashboardFilters = {
   windowDays: 14,
@@ -32,7 +31,6 @@ export default function DashboardClient() {
   const [error, setError] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
-  const [detailTicker, setDetailTicker] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedMinUsd(filters.minUsd), MIN_USD_DEBOUNCE_MS);
@@ -121,9 +119,7 @@ export default function DashboardClient() {
         totalInsidersTracked={totalInsidersTracked}
         windowDays={filters.windowDays}
       />
-      <DashboardLayout topBuys={topBuys} signals={filteredSignals} onSelectTicker={setDetailTicker} />
-
-      <TickerDetailModal ticker={detailTicker} onClose={() => setDetailTicker(null)} />
+      <DashboardLayout topBuys={topBuys} signals={filteredSignals} />
     </>
   );
 }

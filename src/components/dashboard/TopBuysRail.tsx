@@ -1,13 +1,8 @@
+import Link from "next/link";
 import type { Transaction } from "@/types/filing";
 import { fmtDate, fmtUsd } from "@/lib/format";
 
-export default function TopBuysRail({
-  topBuys,
-  onSelectTicker,
-}: {
-  topBuys: Transaction[];
-  onSelectTicker: (ticker: string) => void;
-}) {
+export default function TopBuysRail({ topBuys }: { topBuys: Transaction[] }) {
   return (
     <aside className="rounded-xl border border-border bg-bg-panel p-4">
       <h2 className="mb-3 text-[13px] font-semibold uppercase tracking-wide text-text-dim">
@@ -21,10 +16,9 @@ export default function TopBuysRail({
       ) : (
         <div className="flex max-h-[640px] flex-col gap-0.5 overflow-y-auto">
           {topBuys.map((t, idx) => (
-            <button
-              type="button"
+            <Link
+              href={`/ticker/${encodeURIComponent(t.ticker)}`}
               key={t.id}
-              onClick={() => onSelectTicker(t.ticker)}
               className="flex w-full items-center gap-2.5 rounded-md px-1.5 py-1.5 text-left hover:bg-bg-hover"
             >
               <span className="w-[18px] shrink-0 text-right font-mono text-[11px] text-text-faint">
@@ -44,7 +38,7 @@ export default function TopBuysRail({
                   {t.ticker} · {fmtUsd(t.valueUsd)} · {fmtDate(t.transactionDate)}
                 </span>
               </span>
-            </button>
+            </Link>
           ))}
         </div>
       )}
