@@ -90,6 +90,16 @@ export async function getTickerHistory(ticker: string): Promise<TransactionRow[]
   return result.rows as unknown as TransactionRow[];
 }
 
+const filerTickerHistorySql = `SELECT ${COLUMNS} FROM transactions WHERE ticker = ? AND filer_id = ? ORDER BY transaction_date ASC`;
+
+/** One filer's full transaction history at one company, oldest first — every tracked code (not
+ * just P/S), since the insider-detail shares-over-time view needs the true holdings trajectory,
+ * not just open-market trades. */
+export async function getFilerTransactionHistory(ticker: string, filerId: string): Promise<TransactionRow[]> {
+  const result = await client.execute({ sql: filerTickerHistorySql, args: [ticker, filerId] });
+  return result.rows as unknown as TransactionRow[];
+}
+
 const allTickersSql = `SELECT DISTINCT ticker FROM transactions`;
 
 export async function getAllTickers(): Promise<string[]> {

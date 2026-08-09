@@ -6,6 +6,7 @@ import type { CompanyEvent, InstitutionalEvent, Transaction, TransactionSide } f
 import Badge from "@/components/ui/Badge";
 import WatchButton from "@/components/ui/WatchButton";
 import Sparkline from "@/components/ui/Sparkline";
+import InsiderDetailModal from "@/components/dashboard/InsiderDetailModal";
 import {
   fmtAcquisitionLabel,
   fmtCompanyEventLabel,
@@ -57,6 +58,7 @@ export default function TickerDetailModal({
   const [detail, setDetail] = useState<Detail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedFilerId, setSelectedFilerId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!ticker) return;
@@ -94,10 +96,11 @@ export default function TickerDetailModal({
   if (!ticker) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 pt-[8vh] backdrop-blur-sm"
-      onClick={onClose}
-    >
+    <>
+      <div
+        className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 pt-[8vh] backdrop-blur-sm"
+        onClick={onClose}
+      >
       <div
         className="w-full max-w-2xl rounded-xl border border-border bg-bg-panel p-5 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
@@ -176,7 +179,14 @@ export default function TickerDetailModal({
               ) : (
                 <ol className="ml-2 space-y-1.5 border-l border-border">
                   {buildTimeline(detail).map((item) => {
-                    if (item.kind === "trade") return <TradeItem key={item.transaction.id} t={item.transaction} />;
+                    if (item.kind === "trade")
+                      return (
+                        <TradeItem
+                          key={item.transaction.id}
+                          t={item.transaction}
+                          onSelectFiler={setSelectedFilerId}
+                        />
+                      );
                     if (item.kind === "event")
                       return <EventItem key={`${item.event.type}:${item.event.filedDate}`} e={item.event} />;
                     return (
@@ -192,11 +202,13 @@ export default function TickerDetailModal({
           </>
         )}
       </div>
-    </div>
+      </div>
+      <InsiderDetailModal ticker={ticker} filerId={selectedFilerId} onClose={() => setSelectedFilerId(null)} />
+    </>
   );
 }
 
-function TradeItem({ t }: { t: Transaction }) {
+function TradeItem({ t, onSelectFiler }: { t: Transaction; onSelectFiler: (filerId: string) => void }) {
   const pct = pctOfPriorHoldings(t.side, t.shares, t.sharesOwnedAfter);
   return (
     <li className="relative pl-4">
@@ -215,7 +227,16 @@ function TradeItem({ t }: { t: Transaction }) {
         className="flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg border border-border bg-bg-panel-2 px-2.5 py-1.5 font-mono text-[11px] hover:border-accent cursor-pointer"
       >
         <Badge variant={sideChipClass(t.side)}>{t.side}</Badge>
-        <span className="text-text">{t.filerName}</span>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelectFiler(t.filerId);
+          }}
+          className="text-text hover:text-accent hover:underline"
+        >
+          {t.filerName}
+        </button>
         {t.filerRole && <span className="text-text-faint">({t.filerRole})</span>}
         <span className="text-text-dim">
           {fmtShares(t.shares)} Aktien

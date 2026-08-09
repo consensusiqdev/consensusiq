@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Badge from "@/components/ui/Badge";
+import InsiderDetailModal from "@/components/dashboard/InsiderDetailModal";
 import { fmtDate, fmtShares } from "@/lib/format";
 
 const PAGE_SIZE = 5;
@@ -30,6 +31,7 @@ export default function CompanyInsidersClient({ ticker }: { ticker: string }) {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedFilerId, setSelectedFilerId] = useState<string | null>(null);
 
   async function loadPage(offset: number) {
     const res = await fetch(`/api/company-insiders?ticker=${encodeURIComponent(ticker)}&offset=${offset}&limit=${PAGE_SIZE}`);
@@ -96,21 +98,35 @@ export default function CompanyInsidersClient({ ticker }: { ticker: string }) {
 
       <div className="space-y-1.5">
         {positions.map((p) => (
-          <a
+          <div
             key={p.filerId}
-            href={p.sourceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
             className="flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg border border-border bg-bg-panel-2 px-3 py-2 font-mono text-[12px] hover:border-accent"
           >
-            <span className="text-text">{p.filerName}</span>
+            <button
+              type="button"
+              onClick={() => setSelectedFilerId(p.filerId)}
+              className="text-text hover:text-accent hover:underline"
+            >
+              {p.filerName}
+            </button>
             {p.filerRole && <span className="text-text-faint">({p.filerRole})</span>}
             <span className="ml-auto text-text-dim">{fmtShares(p.shares)} Aktien</span>
             <Badge variant="other">{SOURCE_LABELS[p.sourceType]}</Badge>
             <span className="text-text-faint">Stand {fmtDate(p.asOfDate)}</span>
-          </a>
+            <a
+              href={p.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="SEC-Quelle öffnen"
+              className="text-text-faint hover:text-accent"
+            >
+              ↗
+            </a>
+          </div>
         ))}
       </div>
+
+      <InsiderDetailModal ticker={ticker} filerId={selectedFilerId} onClose={() => setSelectedFilerId(null)} />
 
       <p className="mt-3 font-mono text-[11px] text-text-faint">
         {positions.length} von {total} bekannten Insidern
