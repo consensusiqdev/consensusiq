@@ -7,6 +7,7 @@ import Badge from "@/components/ui/Badge";
 import { fmtAcquisitionLabel, fmtDate, fmtPct, fmtRelativeTime, fmtShares, fmtUsd, sideChipClass } from "@/lib/format";
 import { pctOfPriorHoldings } from "@/lib/consensus";
 import WatchButton from "@/components/ui/WatchButton";
+import InsiderDetailModal from "@/components/dashboard/InsiderDetailModal";
 
 function scoreTierClass(score: number): string {
   if (score >= 80) return "border-accent text-accent";
@@ -82,6 +83,7 @@ export default function TickerCard({
   onSelectTicker: (ticker: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [selectedFilerId, setSelectedFilerId] = useState<string | null>(null);
 
   return (
     <div
@@ -169,16 +171,21 @@ export default function TickerCard({
                   .map((f) => {
                     const pct = pctOfPriorHoldings(s.side, f.shares, f.sharesOwnedAfter);
                     return (
-                      <a
+                      <div
                         key={f.filerId}
-                        href={f.sourceUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
                         className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded-lg border border-border bg-bg-panel py-1 pl-0.5 pr-2.5 font-mono text-[11px] hover:border-accent"
                       >
                         <Badge variant={sideChipClass(s.side)}>{s.side}</Badge>
-                        <span>{f.filerName}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedFilerId(f.filerId);
+                          }}
+                          className="hover:text-accent hover:underline"
+                        >
+                          {f.filerName}
+                        </button>
                         {f.filerRole && <span className="text-text-faint">({f.filerRole})</span>}
                         <span className="text-text-dim">
                           {fmtShares(f.shares)} Aktien
@@ -194,7 +201,17 @@ export default function TickerCard({
                         {f.priorAcquisition && (
                           <span className="text-text-faint">· {fmtAcquisitionLabel(f.priorAcquisition)}</span>
                         )}
-                      </a>
+                        <a
+                          href={f.sourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          title="SEC-Quelle öffnen"
+                          className="text-text-faint hover:text-accent"
+                        >
+                          ↗
+                        </a>
+                      </div>
                     );
                   })}
               </div>
@@ -202,6 +219,12 @@ export default function TickerCard({
           ))}
         </div>
       )}
+
+      <InsiderDetailModal
+        ticker={signal.ticker}
+        filerId={selectedFilerId}
+        onClose={() => setSelectedFilerId(null)}
+      />
     </div>
   );
 }

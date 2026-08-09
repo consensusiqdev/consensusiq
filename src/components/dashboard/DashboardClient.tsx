@@ -6,6 +6,7 @@ import FilterBar, { type DashboardFilters } from "@/components/dashboard/FilterB
 import KPIGrid from "@/components/dashboard/KPIGrid";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import TickerDetailModal from "@/components/dashboard/TickerDetailModal";
+import InsiderDetailModal from "@/components/dashboard/InsiderDetailModal";
 
 const DEFAULT_FILTERS: DashboardFilters = {
   windowDays: 14,
@@ -35,6 +36,7 @@ export default function DashboardClient() {
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [detailTicker, setDetailTicker] = useState<string | null>(null);
+  const [selectedFiler, setSelectedFiler] = useState<{ ticker: string; filerId: string } | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedMinUsd(filters.minUsd), MIN_USD_DEBOUNCE_MS);
@@ -131,10 +133,16 @@ export default function DashboardClient() {
         topBuys={topBuys}
         signals={filteredSignals}
         onSelectTicker={setDetailTicker}
+        onSelectFiler={(ticker, filerId) => setSelectedFiler({ ticker, filerId })}
         resetKey={JSON.stringify(filters) + refreshNonce}
       />
 
       <TickerDetailModal ticker={detailTicker} onClose={() => setDetailTicker(null)} />
+      <InsiderDetailModal
+        ticker={selectedFiler?.ticker ?? ""}
+        filerId={selectedFiler?.filerId ?? null}
+        onClose={() => setSelectedFiler(null)}
+      />
     </>
   );
 }

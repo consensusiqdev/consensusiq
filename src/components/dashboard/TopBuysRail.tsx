@@ -1,12 +1,15 @@
+import Link from "next/link";
 import type { Transaction } from "@/types/filing";
 import { fmtDate, fmtUsd } from "@/lib/format";
 
 export default function TopBuysRail({
   topBuys,
   onSelectTicker,
+  onSelectFiler,
 }: {
   topBuys: Transaction[];
   onSelectTicker: (ticker: string) => void;
+  onSelectFiler: (ticker: string, filerId: string) => void;
 }) {
   return (
     <aside className="rounded-xl border border-border bg-bg-panel p-4">
@@ -21,11 +24,15 @@ export default function TopBuysRail({
       ) : (
         <div className="flex max-h-[640px] flex-col gap-0.5 overflow-y-auto">
           {topBuys.map((t, idx) => (
-            <button
-              type="button"
+            <div
               key={t.id}
+              role="button"
+              tabIndex={0}
               onClick={() => onSelectTicker(t.ticker)}
-              className="flex w-full items-center gap-2.5 rounded-md px-1.5 py-1.5 text-left hover:bg-bg-hover"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") onSelectTicker(t.ticker);
+              }}
+              className="flex w-full items-center gap-2.5 rounded-md px-1.5 py-1.5 text-left hover:bg-bg-hover cursor-pointer"
             >
               <span className="w-[18px] shrink-0 text-right font-mono text-[11px] text-text-faint">
                 #{idx + 1}
@@ -36,15 +43,31 @@ export default function TopBuysRail({
               </span>
 
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[12.5px] text-text">
-                  {t.filerName}
+                <span className="block truncate text-[12.5px]">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectFiler(t.ticker, t.filerId);
+                    }}
+                    className="text-text hover:text-accent hover:underline"
+                  >
+                    {t.filerName}
+                  </button>
                   {t.filerRole && <span className="text-text-faint"> ({t.filerRole})</span>}
                 </span>
                 <span className="block font-mono text-[11px] text-text-dim">
-                  {t.ticker} · {fmtUsd(t.valueUsd)} · {fmtDate(t.transactionDate)}
+                  <Link
+                    href={`/company/${t.ticker}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-accent hover:underline"
+                  >
+                    {t.ticker}
+                  </Link>{" "}
+                  · {fmtUsd(t.valueUsd)} · {fmtDate(t.transactionDate)}
                 </span>
               </span>
-            </button>
+            </div>
           ))}
         </div>
       )}
