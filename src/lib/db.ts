@@ -107,6 +107,18 @@ export async function getAllTickers(): Promise<string[]> {
   return (result.rows as unknown as { ticker: string }[]).map((r) => r.ticker);
 }
 
+const allCompaniesSql = `SELECT ticker, MAX(company_name) as company_name FROM transactions GROUP BY ticker ORDER BY ticker`;
+
+export type CompanyRow = { ticker: string; company_name: string };
+
+/** Every tracked ticker with its company name, for the company-search box — small enough
+ * (hundreds, not thousands, of rows) to fetch once and filter client-side rather than building
+ * a server-side search endpoint. */
+export async function getAllCompanies(): Promise<CompanyRow[]> {
+  const result = await client.execute(allCompaniesSql);
+  return result.rows as unknown as CompanyRow[];
+}
+
 const mostRecentBuyBeforeSql = `SELECT transaction_date, price_per_share, shares, transaction_code FROM transactions
    WHERE filer_id = ? AND ticker = ? AND side = 'BUY' AND transaction_date < ?
    ORDER BY transaction_date DESC LIMIT 1`;

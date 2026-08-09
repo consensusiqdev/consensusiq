@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useUser, UserButton } from "@clerk/nextjs";
 import ThemeToggle from "@/components/ui/ThemeToggle";
+import CompanySearch from "@/components/ui/CompanySearch";
 
 export default function TopBar() {
   const { isSignedIn } = useUser();
@@ -26,6 +27,7 @@ export default function TopBar() {
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
+        <CompanySearch />
         <Link
           href="/institutional"
           className="hidden rounded-md border border-border px-3 py-2 font-mono text-[12.5px] text-text-dim hover:border-accent hover:text-text sm:inline-block"
