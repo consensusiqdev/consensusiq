@@ -178,7 +178,7 @@ export default function TickerDetailModal({
                 </p>
               ) : (
                 <ol className="ml-2 space-y-1.5 border-l border-border">
-                  {buildTimeline(detail).map((item) => {
+                  {buildTimeline(detail).map((item, index) => {
                     if (item.kind === "trade")
                       return (
                         <TradeItem
@@ -188,10 +188,15 @@ export default function TickerDetailModal({
                         />
                       );
                     if (item.kind === "event")
-                      return <EventItem key={`${item.event.type}:${item.event.filedDate}`} e={item.event} />;
+                      return (
+                        <EventItem
+                          key={`${item.event.type}:${item.event.filedDate}:${item.event.sourceUrl}:${index}`}
+                          e={item.event}
+                        />
+                      );
                     return (
                       <InstitutionalItem
-                        key={`${item.event.fundName}:${item.event.quarter}`}
+                        key={`${item.event.fundName}:${item.event.quarter}:${index}`}
                         e={item.event}
                       />
                     );
