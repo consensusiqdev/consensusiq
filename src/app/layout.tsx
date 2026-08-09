@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Space_Grotesk, IBM_Plex_Mono } from "next/font/google";
 import Script from "next/script";
+import { Analytics } from "@vercel/analytics/next";
 import { ClerkProvider } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
@@ -126,7 +127,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             dangerouslySetInnerHTML={{ __html: JSON.stringify(WEBSITE_JSON_LD) }}
           />
         </head>
-        <body className="min-h-full flex flex-col bg-bg text-text">{children}</body>
+        <body className="min-h-full flex flex-col bg-bg text-text">
+          {children}
+          <Analytics />
+        </body>
       </html>
     </ClerkProvider>
   );
