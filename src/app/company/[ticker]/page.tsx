@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import TopBar from "@/components/Layout/TopBar";
 import CompanyInsidersClient from "@/components/company/CompanyInsidersClient";
+import CompanyHistoryButton from "@/components/company/CompanyHistoryButton";
 import Badge from "@/components/ui/Badge";
 import Sparkline from "@/components/ui/Sparkline";
 import { getTickerDetail } from "@/lib/tickerDetail";
@@ -73,6 +74,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ ticker
               <Badge variant="accent">{detail.industry}</Badge>
             </Link>
           )}
+          <CompanyHistoryButton ticker={ticker} />
         </div>
 
         <div className="mt-6 rounded-xl border border-border bg-bg-panel p-5">
