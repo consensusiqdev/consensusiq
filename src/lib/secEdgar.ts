@@ -439,6 +439,20 @@ export async function fetchCompanyEvents(ticker: string): Promise<CompanyEvent[]
     events.push({ type, filedDate, sourceUrl });
   });
 
+  // An AGM_ANNOUNCED (DEF 14A) is presumed still pending unless a later AGM_RESULTS (8-K Item
+  // 5.07) shows the meeting already happened — see the `upcoming` field's doc comment on
+  // CompanyEvent for why this is an inference, not an actual extracted meeting date. Only the
+  // MOST RECENT DEF 14A is ever eligible — Item 5.07 (results disclosure) has only been required
+  // since ~2011, so old pre-2011 announcements would otherwise never find a matching results
+  // filing and get permanently, wrongly flagged as "upcoming" decades later.
+  const mostRecentAnnounced = events
+    .filter((e) => e.type === "AGM_ANNOUNCED")
+    .reduce<CompanyEvent | null>((latest, e) => (!latest || e.filedDate > latest.filedDate ? e : latest), null);
+  if (mostRecentAnnounced) {
+    const resultsDates = events.filter((e) => e.type === "AGM_RESULTS").map((e) => e.filedDate);
+    mostRecentAnnounced.upcoming = !resultsDates.some((d) => d > mostRecentAnnounced.filedDate);
+  }
+
   return events;
 }
 

@@ -98,6 +98,11 @@ export type CompanyEvent = {
   type: "AGM_ANNOUNCED" | "AGM_RESULTS" | "EXEC_CHANGE" | "INSIDER_JOINED" | "ACTIVIST_STAKE" | "IPO_OR_OFFERING";
   filedDate: string;
   sourceUrl: string;
+  // AGM_ANNOUNCED only: true if no AGM_RESULTS (8-K Item 5.07) has been filed since this
+  // announcement — i.e. the meeting is presumed still pending. Inferred from filing presence,
+  // not the actual meeting date: SEC exposes no structured "meeting date" field, and the real
+  // date only lives in the DEF 14A's free text (unreliable to parse — see secEdgar.ts).
+  upcoming?: boolean;
 };
 
 /**

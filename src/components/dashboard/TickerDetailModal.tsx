@@ -273,14 +273,26 @@ function TradeItem({ t, onSelectFiler }: { t: Transaction; onSelectFiler: (filer
 function EventItem({ e }: { e: CompanyEvent }) {
   return (
     <li className="relative pl-4">
-      <span className="absolute -left-[5px] top-1.5 h-2 w-2 rounded-full bg-text-faint ring-2 ring-bg-panel" />
+      <span
+        className={`absolute -left-[5px] top-1.5 h-2 w-2 rounded-full ring-2 ring-bg-panel ${
+          e.upcoming ? "bg-accent" : "bg-text-faint"
+        }`}
+      />
       <a
         href={e.sourceUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className="flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg px-2.5 py-1 font-mono text-[10.5px] text-text-faint hover:text-text"
+        className={`flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg px-2.5 py-1 font-mono text-[10.5px] ${
+          e.upcoming ? "border border-border bg-bg-panel-2 text-text hover:border-accent" : "text-text-faint hover:text-text"
+        }`}
       >
+        {e.upcoming && <Badge variant="accent">Bevorstehend</Badge>}
         <span>{fmtCompanyEventLabel(e)}</span>
+        {e.upcoming && (
+          <span className="text-text-faint" title="SEC stellt kein strukturiertes Versammlungsdatum bereit — genauer Termin steht in der Meldung selbst.">
+            · Termin siehe Meldung
+          </span>
+        )}
         <span className="ml-auto">{fmtDate(e.filedDate)}</span>
       </a>
     </li>
