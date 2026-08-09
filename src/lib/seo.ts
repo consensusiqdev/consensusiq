@@ -5,6 +5,15 @@ import type { Metadata } from "next";
 export const SITE_URL = "https://insider-align.com";
 export const SITE_NAME = "InsiderAlign";
 
+// The site isn't actually meant to be found yet — the user is 17, and Impressum/real payments
+// are blocked on turning 18 (see project memory). All the SEO plumbing (sitemap, metadata,
+// JSON-LD) is built and ready, but search engines must not index it until that's resolved —
+// the Impressum is still a placeholder, and being findable while it says
+// "[Name/Firma, siehe Impressum]" isn't acceptable. Flip this to `true` once ready to launch —
+// it's read by both robots.ts (blocks crawling entirely while false) and the root layout's
+// sitewide `noindex` meta tag (defense in depth in case some crawler ignores robots.txt).
+export const SITE_INDEXABLE = false;
+
 export function absoluteUrl(path: string): string {
   return new URL(path, SITE_URL).toString();
 }
