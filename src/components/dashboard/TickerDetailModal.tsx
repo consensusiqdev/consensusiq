@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import type { CompanyEvent, InstitutionalEvent, Transaction } from "@/types/filing";
+import type { CompanyEvent, InstitutionalEvent, Transaction, TransactionSide } from "@/types/filing";
 import Badge from "@/components/ui/Badge";
 import WatchButton from "@/components/ui/WatchButton";
+import Sparkline from "@/components/ui/Sparkline";
 import {
   fmtAcquisitionLabel,
   fmtCompanyEventLabel,
@@ -16,7 +17,7 @@ import {
   institutionalChipClass,
   sideChipClass,
 } from "@/lib/format";
-import { pctOfPriorHoldings } from "@/lib/consensus";
+import { pctOfPriorHoldings, type SignalHistoryPoint } from "@/lib/consensus";
 
 type Detail = {
   ticker: string;
@@ -25,6 +26,9 @@ type Detail = {
   transactions: Transaction[];
   companyEvents: CompanyEvent[];
   institutionalEvents: InstitutionalEvent[];
+  signalScore: number | null;
+  leadSide: TransactionSide | null;
+  signalHistory: SignalHistoryPoint[];
 };
 
 type TimelineItem =
@@ -148,6 +152,18 @@ export default function TickerDetailModal({
               <Stat label="Käufe" value={String(detail.stats.buyCount)} accent="yes" />
               <Stat label="Verkäufe" value={String(detail.stats.sellCount)} accent="no" />
               <Stat label="Insider gesamt" value={String(detail.stats.distinctFilers)} />
+            </div>
+
+            <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-border bg-bg-panel-2 px-3 py-2">
+              <div>
+                <div className="font-mono text-[9.5px] uppercase tracking-wide text-text-faint">
+                  Signal Score (30 Tage)
+                </div>
+                <div className="text-lg font-bold text-text">
+                  {detail.signalScore != null ? detail.signalScore : "—"}
+                </div>
+              </div>
+              <Sparkline points={detail.signalHistory} width={140} height={36} />
             </div>
 
             <div className="mt-4 max-h-[50vh] overflow-y-auto border-t border-dashed border-border pt-3">

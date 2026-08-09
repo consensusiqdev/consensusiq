@@ -1,6 +1,14 @@
+import type { Metadata } from "next";
 import TopBar from "@/components/Layout/TopBar";
 import WatchlistClient from "@/components/watchlist/WatchlistClient";
 import { requireActiveSubscription } from "@/lib/subscription";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata: Metadata = pageMetadata({
+  title: "Watchlist | InsiderAlign",
+  description: "Deine beobachteten Aktien und Insider-Alert-Einstellungen.",
+  path: "/watchlist",
+});
 
 export default async function WatchlistPage() {
   await requireActiveSubscription();

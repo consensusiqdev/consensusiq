@@ -1,4 +1,12 @@
+import type { Metadata } from "next";
 import PublicHeader from "@/components/Layout/PublicHeader";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata: Metadata = pageMetadata({
+  title: "Impressum | InsiderAlign",
+  description: "Rechtliche Angaben zum Betreiber von InsiderAlign gemäß § 5 TMG.",
+  path: "/impressum",
+});
 
 export default function ImpressumPage() {
   return (

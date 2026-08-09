@@ -190,6 +190,44 @@ export function topBuyTransactions(transactions: Transaction[], limit = 8): Tran
     .slice(0, limit);
 }
 
+export type SignalHistoryPoint = {
+  weekStart: string; // ISO date, start of the 7-day bucket
+  score: number | null; // null = no qualifying activity that week — render as a gap, not 0
+  leadSide: TransactionSide | null;
+};
+
+/**
+ * Weekly-bucketed signal-score trend for a single ticker, derived from its own transaction
+ * history — there's no persisted score-over-time table, so this recomputes the same
+ * buildTickerMap/summarizeTickers pipeline used everywhere else, once per non-overlapping 7-day
+ * window. `transactions` must already be pre-filtered by the caller the same way every other
+ * consensus computation is (open-market P/S only, `!nearOffering`) — this function doesn't
+ * re-filter by transaction code itself, same contract as `computeConsensus`.
+ */
+export function computeSignalHistory(
+  transactions: Transaction[],
+  weeks = 12,
+  minUsd = 1000
+): SignalHistoryPoint[] {
+  const now = Date.now();
+  const points: SignalHistoryPoint[] = [];
+
+  for (let i = weeks - 1; i >= 0; i--) {
+    const windowStartIso = new Date(now - (i + 1) * 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const windowEndIso = new Date(now - i * 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const bucket = transactions.filter((t) => t.filedDate >= windowStartIso && t.filedDate < windowEndIso);
+
+    const [signal] = bucket.length > 0 ? summarizeTickers(buildTickerMap(bucket, minUsd)) : [];
+    points.push({
+      weekStart: windowStartIso,
+      score: signal?.signalScore ?? null,
+      leadSide: signal?.leadSide ?? null,
+    });
+  }
+
+  return points;
+}
+
 export type SortOption = "consensus" | "exposure" | "conviction" | "score";
 
 export function filterAndSortConsensus(

@@ -4,6 +4,7 @@ import Script from "next/script";
 import { ClerkProvider } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
+import { SITE_NAME, SITE_URL } from "@/lib/seo";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -18,10 +19,43 @@ const ibmPlexMono = IBM_Plex_Mono({
   weight: ["400", "500", "600"],
 });
 
+const DESCRIPTION =
+  "Beobachtet SEC-Form-4-Insidergeschäfte und zeigt, wann mehrere Insider dieselbe Aktie kaufen oder verkaufen.";
+
 export const metadata: Metadata = {
-  title: "InsiderAlign — SEC Insider-Trading-Tracker",
-  description:
-    "Beobachtet SEC-Form-4-Insidergeschäfte und zeigt, wann mehrere Insider dieselbe Aktie kaufen oder verkaufen.",
+  metadataBase: new URL(SITE_URL),
+  // A plain string, not a { default, template } object — every page in this codebase already
+  // writes its own full "X | InsiderAlign" title (see /methodik, /institutional), so a template
+  // here would double up the suffix instead of composing with it.
+  title: `${SITE_NAME} — SEC Insider-Trading-Tracker`,
+  description: DESCRIPTION,
+  openGraph: {
+    title: `${SITE_NAME} — SEC Insider-Trading-Tracker`,
+    description: DESCRIPTION,
+    url: SITE_URL,
+    siteName: SITE_NAME,
+    locale: "de_DE",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: `${SITE_NAME} — SEC Insider-Trading-Tracker`,
+    description: DESCRIPTION,
+  },
+};
+
+const ORGANIZATION_JSON_LD = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: SITE_NAME,
+  url: SITE_URL,
+};
+
+const WEBSITE_JSON_LD = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: SITE_NAME,
+  url: SITE_URL,
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -77,6 +111,16 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <Script id="theme-init" strategy="beforeInteractive">
             {THEME_INIT_SCRIPT}
           </Script>
+          <script
+            type="application/ld+json"
+            // eslint-disable-next-line react/no-danger
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(ORGANIZATION_JSON_LD) }}
+          />
+          <script
+            type="application/ld+json"
+            // eslint-disable-next-line react/no-danger
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(WEBSITE_JSON_LD) }}
+          />
         </head>
         <body className="min-h-full flex flex-col bg-bg text-text">{children}</body>
       </html>
