@@ -66,31 +66,32 @@ export async function ingestInstitutionalHoldings(): Promise<{ fundsProcessed: n
  * One-time (per fund) backfill: fetches the quarter BEFORE each fund's latest 13F-HR, so
  * "biggest position changes" (getBiggestInstitutionalMoves()) has a baseline to diff against from
  * day one, instead of waiting ~3 months for organic quarterly ingestion to accumulate a second
- * quarter on its own. Skips any fund that already has 2+ distinct quarters on record — safe to
- * call repeatedly (e.g. if a run times out partway through), and becomes a permanent no-op once
+ * quarter on its own. Processes exactly ONE fund per call (the first one still missing a baseline)
+ * — a large fund's CUSIP resolution alone (e.g. Citadel's ~6700 positions, 300ms-throttled OpenFIGI
+ * batches of 100) can approach a single serverless invocation's time budget on its own, so looping
+ * all 20 funds in one call risks a platform-level timeout kill partway through, same reasoning as
+ * insiderPositions.ts's batched Form-4 backfill. Safe to call repeatedly — becomes a no-op once
  * every fund has cleared the one-time gap. Not wired into the daily cron schedule (see
- * /api/cron/institutional-backfill) — meant to be triggered manually, once.
+ * /api/cron/institutional-backfill) — meant to be triggered manually, once per fund (~20 calls).
  */
-export async function backfillPreviousQuarterHoldings(): Promise<{ fundsProcessed: number; holdingsWritten: number }> {
+export async function backfillPreviousQuarterHoldings(): Promise<{ fund: string | null; holdingsWritten: number }> {
   const recentQuarters = await getFundRecentQuarters();
-  let fundsProcessed = 0;
-  let holdingsWritten = 0;
 
-  for (const fund of INSTITUTIONAL_FILERS) {
-    const [, previousOnRecord] = recentQuarters.get(fund.cik) ?? [undefined, undefined];
-    if (previousOnRecord) continue; // already has a diffable baseline
+  const fund = INSTITUTIONAL_FILERS.find((f) => {
+    const [, previousOnRecord] = recentQuarters.get(f.cik) ?? [undefined, undefined];
+    return !previousOnRecord;
+  });
+  if (!fund) return { fund: null, holdingsWritten: 0 }; // every fund already has a diffable baseline
 
-    try {
-      const filing = await fetchPreviousQuarter13F(fund.cik);
-      if (!filing) continue;
-      fundsProcessed++;
-      holdingsWritten += await ingestFiling(fund, filing);
-    } catch (err) {
-      console.warn(`[institutional-backfill] ${fund.name} (CIK ${fund.cik}) fehlgeschlagen:`, err);
-    }
+  try {
+    const filing = await fetchPreviousQuarter13F(fund.cik);
+    if (!filing) return { fund: fund.name, holdingsWritten: 0 };
+    const holdingsWritten = await ingestFiling(fund, filing);
+    return { fund: fund.name, holdingsWritten };
+  } catch (err) {
+    console.warn(`[institutional-backfill] ${fund.name} (CIK ${fund.cik}) fehlgeschlagen:`, err);
+    return { fund: fund.name, holdingsWritten: 0 };
   }
-
-  return { fundsProcessed, holdingsWritten };
 }
 
 function buildEvent(

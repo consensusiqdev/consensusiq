@@ -51,14 +51,16 @@ export async function runInstitutionalCycle(): Promise<void> {
   );
 }
 
-/** One-time, manually-triggered: seeds each fund's previous-quarter 13F as a diffable baseline
- * for "biggest position changes" (see institutional.ts's backfillPreviousQuarterHoldings() doc
- * comment). Not on the daily schedule — call /api/cron/institutional-backfill directly once. */
-export async function runInstitutionalBackfillCycle(): Promise<void> {
+/** One-time, manually-triggered: seeds one fund's previous-quarter 13F as a diffable baseline for
+ * "biggest position changes" (see institutional.ts's backfillPreviousQuarterHoldings() doc
+ * comment) — one fund per call, so call /api/cron/institutional-backfill repeatedly (once per
+ * fund) until `fund` comes back null. Not on the daily schedule. */
+export async function runInstitutionalBackfillCycle(): Promise<{ fund: string | null; holdingsWritten: number }> {
   const result = await backfillPreviousQuarterHoldings();
   console.log(
-    `[institutional-backfill] ${new Date().toISOString()} — ${result.fundsProcessed} Fonds verarbeitet, ${result.holdingsWritten} Positionen geschrieben`
+    `[institutional-backfill] ${new Date().toISOString()} — ${result.fund ?? "fertig, kein Fonds mehr offen"}: ${result.holdingsWritten} Positionen geschrieben`
   );
+  return result;
 }
 
 /** The 3-min cycle: one batch of a ticker's Form 3/4/5 insider backfill (may span multiple cycles for large companies). */
