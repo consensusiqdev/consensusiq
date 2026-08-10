@@ -4,8 +4,10 @@ import { getAllTickers } from "@/lib/db";
 import { listIndustries } from "@/lib/sectors";
 
 const STATIC_ROUTES: { path: string; priority: number; changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"] }[] = [
-  { path: "/", priority: 1, changeFrequency: "daily" },
-  { path: "/dashboard", priority: 0.9, changeFrequency: "hourly" },
+  // "/" itself just redirects to "/dashboard" now (see next.config.ts) — not listed here, a
+  // redirecting URL doesn't belong in a sitemap.
+  { path: "/dashboard", priority: 1, changeFrequency: "hourly" },
+  { path: "/ueber", priority: 0.5, changeFrequency: "monthly" },
   { path: "/sector", priority: 0.7, changeFrequency: "daily" },
   { path: "/institutional", priority: 0.6, changeFrequency: "daily" },
   { path: "/methodik", priority: 0.4, changeFrequency: "monthly" },

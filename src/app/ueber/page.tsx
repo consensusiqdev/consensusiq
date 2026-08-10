@@ -1,5 +1,14 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import PublicHeader from "@/components/Layout/PublicHeader";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata: Metadata = pageMetadata({
+  title: "Über InsiderAlign — SEC Insider-Trading-Tracker | InsiderAlign",
+  description:
+    "Worauf setzen Firmen-Insider gerade — und stimmen sie überein? InsiderAlign wertet öffentliche SEC-Form-4-Meldungen aus und zeigt Insider-Konsens-Signale.",
+  path: "/ueber",
+});
 
 const FEATURES = [
   {
@@ -24,7 +33,7 @@ const FEATURES = [
   },
 ];
 
-export default function Home() {
+export default function AboutPage() {
   return (
     <>
       <PublicHeader />

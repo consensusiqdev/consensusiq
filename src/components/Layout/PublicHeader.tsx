@@ -20,6 +20,9 @@ export default function PublicHeader() {
           <Link href="/dashboard" className="hover:text-text">
             Dashboard
           </Link>
+          <Link href="/ueber" className="hover:text-text">
+            Über
+          </Link>
           <Link href="/pricing" className="hover:text-text">
             Watchlist-Alerts
           </Link>
