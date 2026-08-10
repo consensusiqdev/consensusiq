@@ -21,9 +21,11 @@ const DEFAULT_FILTERS: DashboardFilters = {
 };
 
 const MIN_USD_DEBOUNCE_MS = 400;
+const FILTERS_STORAGE_KEY = "insider-align-filters";
 
 export default function DashboardClient() {
   const [filters, setFilters] = useState<DashboardFilters>(DEFAULT_FILTERS);
+  const [filtersHydrated, setFiltersHydrated] = useState(false);
   const [debouncedMinUsd, setDebouncedMinUsd] = useState(filters.minUsd);
   const [filers, setFilers] = useState<FilerSummary[]>([]);
   const [signals, setSignals] = useState<TickerSignal[]>([]);
@@ -38,12 +40,28 @@ export default function DashboardClient() {
   const [detailTicker, setDetailTicker] = useState<string | null>(null);
   const [selectedFiler, setSelectedFiler] = useState<{ ticker: string; filerId: string } | null>(null);
 
+  // Restore persisted filters once on mount — deliberately a useEffect (not a lazy useState
+  // initializer) since this component's page is statically prerendered; reading localStorage
+  // during the initial render would mismatch between server and client hydration. The main fetch
+  // effect below waits for `filtersHydrated` so this doesn't cause an extra throwaway fetch with
+  // the defaults before the restored filters are applied.
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(FILTERS_STORAGE_KEY);
+      if (stored) setFilters((prev) => ({ ...prev, ...JSON.parse(stored) }));
+    } catch {
+      // Corrupt/inaccessible localStorage — just keep the defaults.
+    }
+    setFiltersHydrated(true);
+  }, []);
+
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedMinUsd(filters.minUsd), MIN_USD_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
   }, [filters.minUsd]);
 
   useEffect(() => {
+    if (!filtersHydrated) return;
     const controller = new AbortController();
     // Standard fetch-in-effect pattern (see react.dev/reference/react/useEffect#fetching-data-with-effects);
     // no data-fetching library in this project yet to hand this off to.
@@ -80,10 +98,18 @@ export default function DashboardClient() {
       });
 
     return () => controller.abort();
-  }, [filters.windowDays, filters.minAgree, debouncedMinUsd, filters.buysOnly, filters.sortBy, refreshNonce]);
+  }, [filtersHydrated, filters.windowDays, filters.minAgree, debouncedMinUsd, filters.buysOnly, filters.sortBy, refreshNonce]);
 
   function handleChange(patch: Partial<DashboardFilters>) {
-    setFilters((prev) => ({ ...prev, ...patch }));
+    setFilters((prev) => {
+      const next = { ...prev, ...patch };
+      try {
+        window.localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // Storage unavailable/full — filter still applies for this session, just won't persist.
+      }
+      return next;
+    });
   }
 
   // Purely local filter — the API already attaches `industry` to every signal, so narrowing by

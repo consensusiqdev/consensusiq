@@ -18,8 +18,11 @@ const SORT_LABELS: Record<SortOption, string> = {
   score: "Höchster Signal Score",
 };
 
+// max-w caps the Branche select specifically — its option text (full SIC industry names) can be
+// much longer than a native <select> otherwise sizes itself to, which pushed the whole page wider
+// than the viewport on mobile. truncate ellipsizes the closed-state display text.
 const SELECT_CLASS =
-  "min-w-[110px] rounded-md border border-border bg-bg-panel-2 px-2.5 py-2 font-mono text-[13px] text-text outline-none focus:border-accent";
+  "min-w-[110px] max-w-[180px] truncate rounded-md border border-border bg-bg-panel-2 px-2.5 py-2 font-mono text-[13px] text-text outline-none focus:border-accent";
 const INPUT_CLASS =
   "w-[100px] rounded-md border border-border bg-bg-panel-2 px-2.5 py-2 font-mono text-[13px] text-text outline-none focus:border-accent";
 
@@ -122,6 +125,8 @@ export default function FilterBar({
 
       <span className="pb-2 font-mono text-[11px] text-text-faint">{updatedLabel}</span>
 
+      <ExportLinks filters={filters} />
+
       <button
         type="button"
         onClick={onRefresh}
@@ -131,6 +136,30 @@ export default function FilterBar({
         {isRefreshing ? "Lädt…" : "Aktualisieren"}
       </button>
     </section>
+  );
+}
+
+/** CSV/RSS export links, carrying the current filters (minus `industry`, which is a purely
+ * client-side narrowing not recognized by the API — same as /api/signals itself). */
+function ExportLinks({ filters }: { filters: DashboardFilters }) {
+  const params = new URLSearchParams({
+    windowDays: String(filters.windowDays),
+    minAgree: String(filters.minAgree),
+    minUsd: String(filters.minUsd),
+    buysOnly: String(filters.buysOnly),
+    sortBy: filters.sortBy,
+  }).toString();
+
+  return (
+    <div className="flex items-center gap-2 pb-2 font-mono text-[11px] text-text-faint">
+      <a href={`/api/export/signals.csv?${params}`} className="hover:text-accent hover:underline">
+        CSV
+      </a>
+      <span className="text-border">·</span>
+      <a href={`/feed.xml?${params}`} target="_blank" rel="noopener noreferrer" className="hover:text-accent hover:underline">
+        RSS
+      </a>
+    </div>
   );
 }
 
