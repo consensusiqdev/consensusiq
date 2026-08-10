@@ -89,6 +89,60 @@ export async function getTickerSummary(ticker: string): Promise<TickerSummary> {
   };
 }
 
+export type TickerComparisonData = {
+  ticker: string;
+  companyName: string;
+  industry: string | null;
+  stats: { buyCount: number; sellCount: number; distinctFilers: number; total: number; totalVolumeUsd: number };
+  signalScore: number | null;
+  leadSide: TransactionSide | null;
+  leadCount: number;
+  signalHistory: SignalHistoryPoint[];
+  recentTransactions: Transaction[];
+};
+
+const RECENT_TRANSACTIONS_LIMIT = 5;
+
+/** Lightweight subset of getTickerDetail() for the /compare page — same reasoning as
+ * getTickerSummary() above: two tickers get fetched per page load, so this deliberately skips the
+ * live SEC EDGAR company-events/institutional-timeline calls and premium enrichment, none of which
+ * the comparison view needs. */
+export async function getTickerComparisonData(ticker: string): Promise<TickerComparisonData> {
+  const [rows, industries] = await Promise.all([getTickerHistory(ticker), getTickerIndustries()]);
+  const allTransactions = mapRowsToTransactions(ticker, rows);
+  const transactions = allTransactions.filter((t) => t.transactionCode === "P" || t.transactionCode === "S");
+  const openMarketOnly = transactions.filter((t) => !t.nearOffering);
+
+  const companyName = transactions[0]?.companyName ?? allTransactions[0]?.companyName ?? ticker;
+  const industry = industries.get(ticker) ?? null;
+  const buyCount = transactions.filter((t) => t.side === "BUY").length;
+  const sellCount = transactions.length - buyCount;
+  const distinctFilers = new Set(transactions.map((t) => t.filerId)).size;
+  const totalVolumeUsd = transactions.reduce((sum, t) => sum + (t.valueUsd ?? 0), 0);
+
+  const sorted = [...transactions].sort((a, b) => (a.transactionDate < b.transactionDate ? 1 : -1));
+
+  const currentWindowStart = new Date(Date.now() - CURRENT_WINDOW_DAYS * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  const currentWindowTx = openMarketOnly.filter((t) => t.filedDate >= currentWindowStart);
+  const [currentSignal] = currentWindowTx.length > 0 ? summarizeTickers(buildTickerMap(currentWindowTx, MIN_USD)) : [];
+
+  const signalHistory = computeSignalHistory(openMarketOnly, 12, MIN_USD);
+
+  return {
+    ticker,
+    companyName,
+    industry,
+    stats: { buyCount, sellCount, distinctFilers, total: transactions.length, totalVolumeUsd },
+    signalScore: currentSignal?.signalScore ?? null,
+    leadSide: currentSignal?.leadSide ?? null,
+    leadCount: currentSignal?.leadCount ?? 0,
+    signalHistory,
+    recentTransactions: sorted.slice(0, RECENT_TRANSACTIONS_LIMIT),
+  };
+}
+
 /**
  * Everything needed for a ticker's detail view — both the dashboard's modal (via
  * api/ticker-detail/route.ts, a thin wrapper around this) and the public /company/[ticker] page
