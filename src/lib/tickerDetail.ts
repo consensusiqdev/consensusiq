@@ -30,14 +30,8 @@ export type TickerDetail = {
   peers: TickerSignal[];
 };
 
-/**
- * Everything needed for a ticker's detail view — both the dashboard's modal (via
- * api/ticker-detail/route.ts, a thin wrapper around this) and the public /company/[ticker] page
- * call this directly, so the two never drift out of sync.
- */
-export async function getTickerDetail(ticker: string): Promise<TickerDetail> {
-  const rows = await getTickerHistory(ticker);
-  const allTransactions: Transaction[] = rows.map((r, i) => ({
+function mapRowsToTransactions(ticker: string, rows: Awaited<ReturnType<typeof getTickerHistory>>): Transaction[] {
+  return rows.map((r, i) => ({
     id: `${ticker}:${r.filer_id}:${r.transaction_date}:${i}`,
     filerId: r.filer_id,
     filerType: r.filer_type as Transaction["filerType"],
@@ -57,6 +51,52 @@ export async function getTickerDetail(ticker: string): Promise<TickerDetail> {
     accessionNumber: "",
     nearOffering: r.near_offering === 1,
   }));
+}
+
+export type TickerSummary = {
+  ticker: string;
+  companyName: string;
+  industry: string | null;
+  signalScore: number | null;
+  leadSide: TransactionSide | null;
+  leadCount: number;
+};
+
+/** Lightweight subset of getTickerDetail() — just the current signal, no SEC EDGAR company-events/
+ * institutional-timeline calls or premium enrichment. Used by the opengraph-image route, which
+ * gets re-fetched by link-preview crawlers and shouldn't pay for the full detail computation. */
+export async function getTickerSummary(ticker: string): Promise<TickerSummary> {
+  const [rows, industries] = await Promise.all([getTickerHistory(ticker), getTickerIndustries()]);
+  const transactions = mapRowsToTransactions(ticker, rows);
+  const companyName = transactions[transactions.length - 1]?.companyName ?? ticker;
+  const industry = industries.get(ticker) ?? null;
+
+  const currentWindowStart = new Date(Date.now() - CURRENT_WINDOW_DAYS * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  const currentWindowTx = transactions.filter(
+    (t) => (t.transactionCode === "P" || t.transactionCode === "S") && !t.nearOffering && t.filedDate >= currentWindowStart
+  );
+  const [currentSignal] = currentWindowTx.length > 0 ? summarizeTickers(buildTickerMap(currentWindowTx, MIN_USD)) : [];
+
+  return {
+    ticker,
+    companyName,
+    industry,
+    signalScore: currentSignal?.signalScore ?? null,
+    leadSide: currentSignal?.leadSide ?? null,
+    leadCount: currentSignal?.leadCount ?? 0,
+  };
+}
+
+/**
+ * Everything needed for a ticker's detail view — both the dashboard's modal (via
+ * api/ticker-detail/route.ts, a thin wrapper around this) and the public /company/[ticker] page
+ * call this directly, so the two never drift out of sync.
+ */
+export async function getTickerDetail(ticker: string): Promise<TickerDetail> {
+  const rows = await getTickerHistory(ticker);
+  const allTransactions = mapRowsToTransactions(ticker, rows);
 
   // The visible trading-history list stays open-market-only, same reasoning as /api/signals —
   // grants/exercises aren't trading decisions and would misleadingly show up with a BUY badge.
