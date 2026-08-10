@@ -35,6 +35,14 @@ async function throttledFetch(url: string): Promise<Response> {
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
+  // Some filers' software wraps every element in a namespace prefix (verified live: Bridgewater
+  // Associates' infotable.xml uses "ns1:infoTable", "ns1:cusip", etc., unlike every other tracked
+  // fund) — without stripping it, `.informationTable.infoTable` silently resolves to undefined
+  // and that filer's holdings parse as an empty array with no error, no exception, nothing to
+  // catch. Safe to enable unconditionally: documents with no prefix (the common case) are
+  // unaffected, this only ever removes something that would otherwise break the unprefixed
+  // property lookups everywhere else in this file.
+  removeNSPrefix: true,
   isArray: (name) =>
     name === "entry" || name === "nonDerivativeTransaction" || name === "infoTable" || name === "nonDerivativeHolding",
 });
