@@ -137,7 +137,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ ticker
 
         <p className="mt-2 max-w-xl text-sm leading-relaxed text-text-dim">
           Bekannte Insider (Vorstände, Directors, Großaktionäre) mit ihrer zuletzt gemeldeten
-          Positionsgröße — nicht nur die, die zuletzt gehandelt haben.
+          Positionsgröße.
         </p>
 
         <div className="mt-6 rounded-xl border border-border bg-bg-panel p-5">
