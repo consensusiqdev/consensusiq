@@ -5,6 +5,7 @@ import CompanyInsidersClient from "@/components/company/CompanyInsidersClient";
 import CompanyHistoryButton from "@/components/company/CompanyHistoryButton";
 import Badge from "@/components/ui/Badge";
 import Sparkline from "@/components/ui/Sparkline";
+import EventItem from "@/components/dashboard/EventItem";
 import { getTickerDetail } from "@/lib/tickerDetail";
 import { slugifyIndustry } from "@/lib/sectors";
 import { fmtUsd } from "@/lib/format";
@@ -135,7 +136,23 @@ export default async function CompanyPage({ params }: { params: Promise<{ ticker
           )}
         </div>
 
-        <p className="mt-2 max-w-xl text-sm leading-relaxed text-text-dim">
+        {detail.companyEvents.length > 0 && (
+          <div className="mt-6 rounded-xl border border-border bg-bg-panel p-5">
+            <h3 className="text-[13px] font-semibold uppercase tracking-wide text-text-dim">
+              Unternehmens-Ereignisse
+            </h3>
+            <ol className="mt-3 ml-2 space-y-1.5 border-l border-border">
+              {[...detail.companyEvents]
+                .sort((a, b) => (a.filedDate < b.filedDate ? 1 : -1))
+                .slice(0, 8)
+                .map((e, i) => (
+                  <EventItem key={`${e.type}:${e.filedDate}:${e.sourceUrl}:${i}`} e={e} />
+                ))}
+            </ol>
+          </div>
+        )}
+
+        <p className="mt-6 max-w-xl text-sm leading-relaxed text-text-dim">
           Bekannte Insider (Vorstände, Directors, Großaktionäre) mit ihrer zuletzt gemeldeten
           Positionsgröße.
         </p>
