@@ -9,7 +9,7 @@ export default function TopBar() {
   const { isSignedIn } = useUser();
 
   return (
-    <header className="mb-6 flex items-start justify-between gap-4 border-b border-border-soft pb-6">
+    <header className="mb-6 flex flex-wrap items-start justify-between gap-4 border-b border-border-soft pb-6">
       <div>
         <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-accent">
           SEC EDGAR · Öffentliche Insider-Meldungen
@@ -26,7 +26,7 @@ export default function TopBar() {
         </p>
       </div>
 
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
         <CompanySearch />
         <Link
           href="/institutional"

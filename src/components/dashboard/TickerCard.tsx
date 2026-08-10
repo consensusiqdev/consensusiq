@@ -92,7 +92,7 @@ export default function TickerCard({
       }`}
       onClick={() => setOpen((v) => !v)}
     >
-      <div className="flex items-start justify-between gap-3.5">
+      <div className="flex flex-wrap items-start justify-between gap-3.5">
         <div className="flex items-start gap-2.5">
           <div
             className={`group relative flex shrink-0 flex-col items-center justify-center rounded-md border px-2 py-1 ${scoreTierClass(signal.signalScore)}`}

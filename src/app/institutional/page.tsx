@@ -78,7 +78,7 @@ function FundCard({ fund, fallbackName }: { fund: FundOverview; fallbackName: st
         {fund.topHoldings.map((h, idx) => (
           <li
             key={`${h.ticker ?? h.issuerName}:${idx}`}
-            className="flex items-center gap-2 font-mono text-[11.5px]"
+            className="flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[11.5px]"
           >
             <span className="w-[16px] shrink-0 text-right text-text-faint">{idx + 1}.</span>
             {h.ticker ? (

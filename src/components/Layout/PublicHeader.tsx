@@ -8,7 +8,7 @@ export default function PublicHeader() {
 
   return (
     <header className="border-b border-border-soft">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 sm:px-10">
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-6 py-4 sm:px-10">
         <Link
           href="/"
           className="font-mono text-sm font-semibold uppercase tracking-[0.14em] text-accent"
@@ -16,7 +16,7 @@ export default function PublicHeader() {
           InsiderAlign
         </Link>
 
-        <nav className="flex items-center gap-5 font-mono text-[13px] text-text-dim">
+        <nav className="flex flex-wrap items-center gap-3 font-mono text-[13px] text-text-dim sm:gap-5">
           <Link href="/dashboard" className="hover:text-text">
             Dashboard
           </Link>
