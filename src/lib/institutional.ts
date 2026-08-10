@@ -74,33 +74,37 @@ export async function ingestInstitutionalHoldings(): Promise<{ fundsProcessed: n
  * no-op once every fund has cleared the one-time gap. Not wired into the daily cron schedule (see
  * /api/cron/institutional-backfill) — meant to be triggered manually, once per fund (~20 calls).
  *
- * Fetches BOTH the latest and previous-quarter 13F, not just the previous one: for the normal case
- * (a fund whose latest quarter already made it into the DB via the regular daily ingest) the latest
- * fetch is a harmless redundant no-op upsert. But a fund whose latest quarter never actually made it
- * in — e.g. Bridgewater, whose info-table XML used a namespace-prefix dialect the parser silently
- * turned into zero holdings before that bug was fixed — would otherwise loop forever: only ever
- * fetching the previous quarter can never grow its DB record past 1 distinct quarter, so the
- * "needs backfill" check above would keep re-selecting it every single call with no progress.
+ * Fetches exactly ONE filing per call — never both latest and previous in the same invocation.
+ * A fund with zero quarters on record (a brand-new addition to INSTITUTIONAL_FILERS, or one that
+ * was previously blocked by a now-fixed parsing bug — e.g. Bridgewater's namespace-prefixed XML,
+ * which silently produced zero holdings) gets its LATEST quarter first; a fund that already has
+ * exactly one quarter (the normal case: latest already landed via the regular daily ingest) gets
+ * its PREVIOUS quarter next call. Splitting these into separate calls, rather than fetching both
+ * at once, matters in practice: a large fund's single-quarter CUSIP resolution alone (e.g. Point72,
+ * hundreds of positions, 300ms-throttled OpenFIGI batches of 100) can already approach a serverless
+ * invocation's time budget — doing two quarters' worth in one call hit FUNCTION_INVOCATION_TIMEOUT
+ * in prod. A fund needing both quarters just costs 2 calls instead of 1; harmless for a one-time
+ * manual backfill.
  */
-export async function backfillPreviousQuarterHoldings(): Promise<{ fund: string | null; holdingsWritten: number }> {
+export async function backfillPreviousQuarterHoldings(): Promise<{ fund: string | null; step: "latest" | "previous" | null; holdingsWritten: number }> {
   const recentQuarters = await getFundRecentQuarters();
 
   const fund = INSTITUTIONAL_FILERS.find((f) => {
     const [, previousOnRecord] = recentQuarters.get(f.cik) ?? [undefined, undefined];
     return !previousOnRecord;
   });
-  if (!fund) return { fund: null, holdingsWritten: 0 }; // every fund already has a diffable baseline
+  if (!fund) return { fund: null, step: null, holdingsWritten: 0 }; // every fund already has a diffable baseline
+
+  const hasLatest = !!recentQuarters.get(fund.cik)?.[0];
+  const step: "latest" | "previous" = hasLatest ? "previous" : "latest";
 
   try {
-    let holdingsWritten = 0;
-    const latest = await fetchLatest13F(fund.cik);
-    if (latest) holdingsWritten += await ingestFiling(fund, latest);
-    const previous = await fetchPreviousQuarter13F(fund.cik);
-    if (previous) holdingsWritten += await ingestFiling(fund, previous);
-    return { fund: fund.name, holdingsWritten };
+    const filing = step === "latest" ? await fetchLatest13F(fund.cik) : await fetchPreviousQuarter13F(fund.cik);
+    const holdingsWritten = filing ? await ingestFiling(fund, filing) : 0;
+    return { fund: fund.name, step, holdingsWritten };
   } catch (err) {
-    console.warn(`[institutional-backfill] ${fund.name} (CIK ${fund.cik}) fehlgeschlagen:`, err);
-    return { fund: fund.name, holdingsWritten: 0 };
+    console.warn(`[institutional-backfill] ${fund.name} (CIK ${fund.cik}, ${step}) fehlgeschlagen:`, err);
+    return { fund: fund.name, step, holdingsWritten: 0 };
   }
 }
 
