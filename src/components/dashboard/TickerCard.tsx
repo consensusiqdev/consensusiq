@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import type { TickerSignal } from "@/types/filing";
 import ConvictionBar from "@/components/ui/ConvictionBar";
 import Badge from "@/components/ui/Badge";
@@ -106,16 +107,14 @@ export default function TickerCard({
             <ScoreTooltip signal={signal} />
           </div>
 
-          <a
-            href={`https://finance.yahoo.com/quote/${encodeURIComponent(signal.ticker)}`}
-            target="_blank"
-            rel="noopener noreferrer"
+          <Link
+            href={`/company/${signal.ticker}`}
             onClick={(e) => e.stopPropagation()}
             className="text-[14.5px] font-semibold leading-snug text-text hover:underline hover:decoration-accent"
           >
             <span className="font-mono text-accent">{signal.ticker}</span>{" "}
             <span className="text-text-dim">{signal.companyName}</span>
-          </a>
+          </Link>
         </div>
 
         <div className="whitespace-nowrap text-right font-mono text-[13px] text-text-dim">

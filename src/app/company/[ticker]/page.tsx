@@ -76,6 +76,14 @@ export default async function CompanyPage({ params }: { params: Promise<{ ticker
             </Link>
           )}
           <CompanyHistoryButton ticker={ticker} />
+          <a
+            href={`https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company=${encodeURIComponent(ticker)}&type=4&dateb=&owner=include&count=40`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-md border border-border px-3 py-1.5 font-mono text-[11.5px] text-text-dim hover:border-accent hover:text-text"
+          >
+            SEC-Meldungen ↗
+          </a>
         </div>
 
         <div className="mt-6 rounded-xl border border-border bg-bg-panel p-5">
