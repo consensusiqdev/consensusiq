@@ -1,18 +1,42 @@
 import "server-only";
-import { INSTITUTIONAL_FILERS } from "@/lib/institutionalFilers";
-import { fetchLatest13F } from "@/lib/secEdgar";
+import { INSTITUTIONAL_FILERS, type InstitutionalFiler } from "@/lib/institutionalFilers";
+import { fetchLatest13F, fetchPreviousQuarter13F, type Form13F } from "@/lib/secEdgar";
 import { resolveCusipsToTickers } from "@/lib/openfigi";
 import {
   getFundHoldings,
   getFundLatestQuarters,
   getFundQuarterFiling,
+  getFundRecentQuarters,
   getInstitutionalActivity,
   upsertInstitutionalHolding,
   type InstitutionalHoldingRow,
 } from "@/lib/db";
-import type { FundOverview, InstitutionalEvent } from "@/types/filing";
+import type { FundOverview, InstitutionalEvent, InstitutionalMove } from "@/types/filing";
 
-const TOP_HOLDINGS_PER_FUND = 10;
+/** Resolves one 13F filing's CUSIPs to tickers and upserts every holding line — shared by the
+ * regular latest-quarter ingest and the one-time previous-quarter backfill below. */
+async function ingestFiling(fund: InstitutionalFiler, filing: Form13F): Promise<number> {
+  const tickerByCusip = await resolveCusipsToTickers(filing.holdings.map((h) => h.cusip));
+
+  await Promise.all(
+    filing.holdings.map((holding) =>
+      upsertInstitutionalHolding({
+        fundCik: fund.cik,
+        fundName: fund.name,
+        cusip: holding.cusip,
+        ticker: tickerByCusip.get(holding.cusip) ?? null,
+        issuerName: holding.issuerName,
+        quarter: filing.quarter,
+        shares: holding.shares,
+        valueUsd: holding.valueUsd,
+        filedDate: filing.filedDate,
+        sourceUrl: filing.sourceUrl,
+      })
+    )
+  );
+
+  return filing.holdings.length;
+}
 
 /**
  * Pulls each curated fund's latest 13F-HR, resolves CUSIPs to tickers, and upserts one row per
@@ -29,28 +53,40 @@ export async function ingestInstitutionalHoldings(): Promise<{ fundsProcessed: n
       const filing = await fetchLatest13F(fund.cik);
       if (!filing) continue;
       fundsProcessed++;
-
-      const tickerByCusip = await resolveCusipsToTickers(filing.holdings.map((h) => h.cusip));
-
-      await Promise.all(
-        filing.holdings.map((holding) =>
-          upsertInstitutionalHolding({
-            fundCik: fund.cik,
-            fundName: fund.name,
-            cusip: holding.cusip,
-            ticker: tickerByCusip.get(holding.cusip) ?? null,
-            issuerName: holding.issuerName,
-            quarter: filing.quarter,
-            shares: holding.shares,
-            valueUsd: holding.valueUsd,
-            filedDate: filing.filedDate,
-            sourceUrl: filing.sourceUrl,
-          })
-        )
-      );
-      holdingsWritten += filing.holdings.length;
+      holdingsWritten += await ingestFiling(fund, filing);
     } catch (err) {
       console.warn(`[institutional] ${fund.name} (CIK ${fund.cik}) fehlgeschlagen:`, err);
+    }
+  }
+
+  return { fundsProcessed, holdingsWritten };
+}
+
+/**
+ * One-time (per fund) backfill: fetches the quarter BEFORE each fund's latest 13F-HR, so
+ * "biggest position changes" (getBiggestInstitutionalMoves()) has a baseline to diff against from
+ * day one, instead of waiting ~3 months for organic quarterly ingestion to accumulate a second
+ * quarter on its own. Skips any fund that already has 2+ distinct quarters on record — safe to
+ * call repeatedly (e.g. if a run times out partway through), and becomes a permanent no-op once
+ * every fund has cleared the one-time gap. Not wired into the daily cron schedule (see
+ * /api/cron/institutional-backfill) — meant to be triggered manually, once.
+ */
+export async function backfillPreviousQuarterHoldings(): Promise<{ fundsProcessed: number; holdingsWritten: number }> {
+  const recentQuarters = await getFundRecentQuarters();
+  let fundsProcessed = 0;
+  let holdingsWritten = 0;
+
+  for (const fund of INSTITUTIONAL_FILERS) {
+    const [, previousOnRecord] = recentQuarters.get(fund.cik) ?? [undefined, undefined];
+    if (previousOnRecord) continue; // already has a diffable baseline
+
+    try {
+      const filing = await fetchPreviousQuarter13F(fund.cik);
+      if (!filing) continue;
+      fundsProcessed++;
+      holdingsWritten += await ingestFiling(fund, filing);
+    } catch (err) {
+      console.warn(`[institutional-backfill] ${fund.name} (CIK ${fund.cik}) fehlgeschlagen:`, err);
     }
   }
 
@@ -129,8 +165,8 @@ export async function getInstitutionalTimelineEvents(ticker: string): Promise<In
 }
 
 /**
- * One card per tracked fund for the /institutional overview page: its latest 13F snapshot's top
- * holdings by value, total portfolio value, and position count. `null` per-fund entries mean we
+ * One card per tracked fund for the /institutional overview page: every reported holding sorted
+ * by value descending, total portfolio value, and position count. `null` per-fund entries mean we
  * don't have any 13F on record yet for that fund (e.g. the daily institutional cron hasn't
  * caught up to it) — the page shows a "noch keine Daten" state for those rather than omitting them.
  */
@@ -159,7 +195,7 @@ export async function getInstitutionalOverview(): Promise<FundOverview[]> {
         sourceUrl: filing.source_url,
         totalValueUsd,
         positionCount: holdings.length,
-        topHoldings: sorted.slice(0, TOP_HOLDINGS_PER_FUND).map((h) => ({
+        holdings: sorted.map((h) => ({
           ticker: h.ticker,
           issuerName: h.issuer_name,
           shares: h.shares,
@@ -168,4 +204,99 @@ export async function getInstitutionalOverview(): Promise<FundOverview[]> {
       };
     })
   );
+}
+
+/**
+ * Every tracked fund's quarter-over-quarter position changes, ranked by absolute dollar change —
+ * "which companies did these funds move the most in/out of this quarter", across all funds at
+ * once (as opposed to getInstitutionalTimelineEvents(), which is the same underlying diff but
+ * scoped to one ticker for the company-page timeline). A fund needs at least two quarters on
+ * record to produce any moves; funds we've only just started tracking contribute nothing here
+ * until their second 13F comes in — same reasoning as buildEvent()'s OPENED fallback.
+ */
+export async function getBiggestInstitutionalMoves(limit = 15): Promise<{
+  increases: InstitutionalMove[];
+  decreases: InstitutionalMove[];
+}> {
+  const quartersByFund = await getFundRecentQuarters();
+
+  const perFundMoves = await Promise.all(
+    [...quartersByFund.entries()].map(async ([fundCik, [currentQuarter, previousQuarter]]) => {
+      if (!currentQuarter || !previousQuarter) return [];
+
+      const fund = INSTITUTIONAL_FILERS.find((f) => f.cik === fundCik);
+      if (!fund) return [];
+
+      const [currentHoldings, previousHoldings, filing] = await Promise.all([
+        getFundHoldings(fundCik, currentQuarter),
+        getFundHoldings(fundCik, previousQuarter),
+        getFundQuarterFiling(fundCik, currentQuarter),
+      ]);
+      if (!filing) return [];
+
+      // Diff by CUSIP would be more precise than by ticker (share-class quirks aside), but
+      // getFundHoldings() doesn't currently return cusip — ticker is good enough here since a
+      // fund holding the exact same company under two different tickers in the same quarter is
+      // not a real-world case worth guarding against.
+      const previousByTicker = new Map(previousHoldings.filter((h) => h.ticker).map((h) => [h.ticker!, h]));
+      const seen = new Set<string>();
+      const moves: InstitutionalMove[] = [];
+
+      for (const h of currentHoldings) {
+        if (!h.ticker) continue; // can't attribute an unresolved CUSIP to a company page — skip
+        seen.add(h.ticker);
+        const prev = previousByTicker.get(h.ticker);
+        const valueUsd = h.value_usd ?? 0;
+        const previousValueUsd = prev?.value_usd ?? 0;
+        const changeUsd = valueUsd - previousValueUsd;
+        if (changeUsd === 0) continue; // unchanged position — not a "move"
+        moves.push({
+          fundName: fund.name,
+          ticker: h.ticker,
+          issuerName: h.issuer_name,
+          changeType: prev ? (changeUsd >= 0 ? "INCREASED" : "DECREASED") : "OPENED",
+          valueUsd,
+          previousValueUsd,
+          changeUsd,
+          changePct: previousValueUsd > 0 ? changeUsd / previousValueUsd : null,
+          quarter: currentQuarter,
+          filedDate: filing.filed_date,
+          sourceUrl: filing.source_url,
+        });
+      }
+
+      for (const h of previousHoldings) {
+        if (!h.ticker || seen.has(h.ticker)) continue;
+        const previousValueUsd = h.value_usd ?? 0;
+        if (previousValueUsd === 0) continue;
+        moves.push({
+          fundName: fund.name,
+          ticker: h.ticker,
+          issuerName: h.issuer_name,
+          changeType: "CLOSED",
+          valueUsd: 0,
+          previousValueUsd,
+          changeUsd: -previousValueUsd,
+          changePct: -1,
+          quarter: currentQuarter,
+          filedDate: filing.filed_date,
+          sourceUrl: filing.source_url,
+        });
+      }
+
+      return moves;
+    })
+  );
+
+  const allMoves = perFundMoves.flat();
+  const increases = allMoves
+    .filter((m) => m.changeUsd > 0)
+    .sort((a, b) => b.changeUsd - a.changeUsd)
+    .slice(0, limit);
+  const decreases = allMoves
+    .filter((m) => m.changeUsd < 0)
+    .sort((a, b) => a.changeUsd - b.changeUsd)
+    .slice(0, limit);
+
+  return { increases, decreases };
 }

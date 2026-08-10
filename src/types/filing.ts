@@ -121,6 +121,25 @@ export type InstitutionalEvent = {
   sourceUrl: string;
 };
 
+/**
+ * One fund's quarter-over-quarter change in a single position, for the /institutional page's
+ * "biggest moves across all funds" ranking — same underlying diff as InstitutionalEvent, but not
+ * scoped to a single ticker's timeline.
+ */
+export type InstitutionalMove = {
+  fundName: string;
+  ticker: string | null;
+  issuerName: string;
+  changeType: "OPENED" | "INCREASED" | "DECREASED" | "CLOSED";
+  valueUsd: number; // current value (0 for CLOSED)
+  previousValueUsd: number; // 0 for OPENED
+  changeUsd: number; // signed: valueUsd - previousValueUsd
+  changePct: number | null; // null when previousValueUsd is 0 (OPENED — no ratio makes sense)
+  quarter: string;
+  filedDate: string;
+  sourceUrl: string;
+};
+
 export type FundHolding = {
   ticker: string | null;
   issuerName: string;
@@ -128,7 +147,9 @@ export type FundHolding = {
   valueUsd: number | null;
 };
 
-/** One tracked "smart money" fund's latest 13F snapshot — top holdings by value, for the /institutional overview page. */
+/** One tracked "smart money" fund's latest 13F snapshot — every reported holding, sorted by value
+ * descending, for the /institutional overview page (which shows a default-visible slice with a
+ * "show more" expand, see FundHoldingsList.tsx). */
 export type FundOverview = {
   fundCik: string;
   fundName: string;
@@ -137,7 +158,7 @@ export type FundOverview = {
   sourceUrl: string;
   totalValueUsd: number;
   positionCount: number;
-  topHoldings: FundHolding[];
+  holdings: FundHolding[];
 } | null; // null when we don't have any 13F on record yet for this fund
 
 export type TickerSignal = {

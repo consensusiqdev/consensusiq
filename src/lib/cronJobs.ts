@@ -1,7 +1,7 @@
 import "server-only";
 import { ingestTransactions } from "@/lib/ingest";
 import { sendWatchlistAlerts } from "@/lib/alerts";
-import { ingestInstitutionalHoldings } from "@/lib/institutional";
+import { backfillPreviousQuarterHoldings, ingestInstitutionalHoldings } from "@/lib/institutional";
 import { checkAndPostTwitterSignals } from "@/lib/twitterBot";
 import { ingestNewForm3Positions, backfillNextTicker } from "@/lib/insiderPositions";
 
@@ -48,6 +48,16 @@ export async function runInstitutionalCycle(): Promise<void> {
   const result = await ingestInstitutionalHoldings();
   console.log(
     `[institutional] ${new Date().toISOString()} — ${result.fundsProcessed} Fonds verarbeitet, ${result.holdingsWritten} Positionen geschrieben`
+  );
+}
+
+/** One-time, manually-triggered: seeds each fund's previous-quarter 13F as a diffable baseline
+ * for "biggest position changes" (see institutional.ts's backfillPreviousQuarterHoldings() doc
+ * comment). Not on the daily schedule — call /api/cron/institutional-backfill directly once. */
+export async function runInstitutionalBackfillCycle(): Promise<void> {
+  const result = await backfillPreviousQuarterHoldings();
+  console.log(
+    `[institutional-backfill] ${new Date().toISOString()} — ${result.fundsProcessed} Fonds verarbeitet, ${result.holdingsWritten} Positionen geschrieben`
   );
 }
 

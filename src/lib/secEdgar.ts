@@ -521,16 +521,21 @@ function periodToQuarter(period: string): string | null {
 }
 
 /**
- * A tracked fund's most recent 13F-HR holdings, summed per CUSIP. A single filer commonly splits
- * one position across several <infoTable> lines for different "Other Included Managers" within
- * one umbrella filing (verified on Berkshire's own filing) — those must be summed, not treated as
- * separate positions. Amendments (13F-HR/A) are deliberately not consulted for v1 — a known,
- * documented limitation, not an oversight.
+ * A tracked fund's Nth-most-recent 13F-HR holdings (occurrenceIndex 0 = latest, 1 = the quarter
+ * before that, ...), summed per CUSIP. A single filer commonly splits one position across several
+ * <infoTable> lines for different "Other Included Managers" within one umbrella filing (verified
+ * on Berkshire's own filing) — those must be summed, not treated as separate positions.
+ * Amendments (13F-HR/A) are deliberately not consulted for v1 — a known, documented limitation,
+ * not an oversight.
  */
-export async function fetchLatest13F(fundCik: string): Promise<Form13F | null> {
+async function fetch13FAtOccurrence(fundCik: string, occurrenceIndex: number): Promise<Form13F | null> {
   const { filings } = await fetchSubmissionsByCik(fundCik);
   const recent = filings?.recent;
-  const idx = recent?.form?.findIndex((f) => f === "13F-HR") ?? -1;
+  const matchingIndexes = recent?.form?.reduce<number[]>((acc, f, i) => {
+    if (f === "13F-HR") acc.push(i);
+    return acc;
+  }, []);
+  const idx = matchingIndexes?.[occurrenceIndex] ?? -1;
   if (idx === -1 || !recent) return null;
 
   const accessionNumber = recent.accessionNumber?.[idx];
@@ -590,6 +595,17 @@ export async function fetchLatest13F(fundCik: string): Promise<Form13F | null> {
     holdings: [...byCusip.values()],
     sourceUrl: `${baseUrl}/${accessionNumber}-index.htm`,
   };
+}
+
+export function fetchLatest13F(fundCik: string): Promise<Form13F | null> {
+  return fetch13FAtOccurrence(fundCik, 0);
+}
+
+/** The quarter before the fund's latest 13F-HR — used once per fund to seed a diffable baseline
+ * for the "biggest position changes" feature (see institutional.ts's backfillPreviousQuarterHoldings()),
+ * since regular ingestion only ever pulls the latest filing going forward. */
+export function fetchPreviousQuarter13F(fundCik: string): Promise<Form13F | null> {
+  return fetch13FAtOccurrence(fundCik, 1);
 }
 
 export async function fetchForm4Transactions(count = 100, concurrency = 5): Promise<Transaction[]> {

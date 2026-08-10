@@ -313,6 +313,28 @@ export async function getFundLatestQuarters(): Promise<Map<string, string>> {
   return new Map(rows.map((r) => [r.fund_cik, r.quarter]));
 }
 
+const distinctFundQuartersSql = `SELECT DISTINCT fund_cik, quarter FROM institutional_holdings ORDER BY fund_cik, quarter DESC`;
+
+/** Per fund, its two most recent distinct quarters on record (newest first; second element is
+ * undefined if we only have one quarter for that fund yet) — used to quarter-over-quarter diff
+ * every fund's holdings for the "biggest position changes" feature, not just a single ticker. */
+export async function getFundRecentQuarters(): Promise<Map<string, [string, string | undefined]>> {
+  const result = await client.execute(distinctFundQuartersSql);
+  const rows = result.rows as unknown as { fund_cik: string; quarter: string }[];
+  const byFund = new Map<string, string[]>();
+  for (const r of rows) {
+    const list = byFund.get(r.fund_cik) ?? [];
+    if (list.length < 2) list.push(r.quarter);
+    byFund.set(r.fund_cik, list);
+  }
+
+  const result2 = new Map<string, [string, string | undefined]>();
+  for (const [cik, quarters] of byFund) {
+    result2.set(cik, [quarters[0], quarters[1]]);
+  }
+  return result2;
+}
+
 const fundQuarterFilingSql = `SELECT filed_date, source_url FROM institutional_holdings WHERE fund_cik = ? AND quarter = ? LIMIT 1`;
 
 /** Filing metadata for any holding row of a fund's given quarter — same filing, so filed_date/source_url are identical across that fund's rows for that quarter. */
