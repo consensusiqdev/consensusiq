@@ -63,16 +63,24 @@ export async function ingestInstitutionalHoldings(): Promise<{ fundsProcessed: n
 }
 
 /**
- * One-time (per fund) backfill: fetches the quarter BEFORE each fund's latest 13F-HR, so
+ * One-time (per fund) backfill: ensures each fund has at least 2 distinct quarters on record so
  * "biggest position changes" (getBiggestInstitutionalMoves()) has a baseline to diff against from
  * day one, instead of waiting ~3 months for organic quarterly ingestion to accumulate a second
- * quarter on its own. Processes exactly ONE fund per call (the first one still missing a baseline)
- * — a large fund's CUSIP resolution alone (e.g. Citadel's ~6700 positions, 300ms-throttled OpenFIGI
- * batches of 100) can approach a single serverless invocation's time budget on its own, so looping
- * all 20 funds in one call risks a platform-level timeout kill partway through, same reasoning as
- * insiderPositions.ts's batched Form-4 backfill. Safe to call repeatedly — becomes a no-op once
- * every fund has cleared the one-time gap. Not wired into the daily cron schedule (see
+ * quarter on its own. Processes exactly ONE fund per call (the first one still missing a second
+ * quarter) — a large fund's CUSIP resolution alone (e.g. Citadel's ~6700 positions, 300ms-throttled
+ * OpenFIGI batches of 100) can approach a single serverless invocation's time budget on its own, so
+ * looping all 20 funds in one call risks a platform-level timeout kill partway through, same
+ * reasoning as insiderPositions.ts's batched Form-4 backfill. Safe to call repeatedly — becomes a
+ * no-op once every fund has cleared the one-time gap. Not wired into the daily cron schedule (see
  * /api/cron/institutional-backfill) — meant to be triggered manually, once per fund (~20 calls).
+ *
+ * Fetches BOTH the latest and previous-quarter 13F, not just the previous one: for the normal case
+ * (a fund whose latest quarter already made it into the DB via the regular daily ingest) the latest
+ * fetch is a harmless redundant no-op upsert. But a fund whose latest quarter never actually made it
+ * in — e.g. Bridgewater, whose info-table XML used a namespace-prefix dialect the parser silently
+ * turned into zero holdings before that bug was fixed — would otherwise loop forever: only ever
+ * fetching the previous quarter can never grow its DB record past 1 distinct quarter, so the
+ * "needs backfill" check above would keep re-selecting it every single call with no progress.
  */
 export async function backfillPreviousQuarterHoldings(): Promise<{ fund: string | null; holdingsWritten: number }> {
   const recentQuarters = await getFundRecentQuarters();
@@ -84,9 +92,11 @@ export async function backfillPreviousQuarterHoldings(): Promise<{ fund: string 
   if (!fund) return { fund: null, holdingsWritten: 0 }; // every fund already has a diffable baseline
 
   try {
-    const filing = await fetchPreviousQuarter13F(fund.cik);
-    if (!filing) return { fund: fund.name, holdingsWritten: 0 };
-    const holdingsWritten = await ingestFiling(fund, filing);
+    let holdingsWritten = 0;
+    const latest = await fetchLatest13F(fund.cik);
+    if (latest) holdingsWritten += await ingestFiling(fund, latest);
+    const previous = await fetchPreviousQuarter13F(fund.cik);
+    if (previous) holdingsWritten += await ingestFiling(fund, previous);
     return { fund: fund.name, holdingsWritten };
   } catch (err) {
     console.warn(`[institutional-backfill] ${fund.name} (CIK ${fund.cik}) fehlgeschlagen:`, err);
