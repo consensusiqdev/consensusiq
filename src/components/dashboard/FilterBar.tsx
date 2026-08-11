@@ -1,4 +1,5 @@
 import type { SortOption } from "@/lib/consensus";
+import SaveScreenButton from "@/components/dashboard/SaveScreenButton";
 
 export type DashboardFilters = {
   windowDays: number;
@@ -138,6 +139,8 @@ export default function FilterBar({
       <span className="pb-2 font-mono text-[11px] text-text-faint">{updatedLabel}</span>
 
       <ExportLinks filters={filters} />
+
+      <SaveScreenButton filters={filters} />
 
       <button
         type="button"

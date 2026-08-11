@@ -208,6 +208,93 @@ export async function getWatchersForTicker(ticker: string): Promise<string[]> {
   return (result.rows as unknown as { clerk_user_id: string }[]).map((r) => r.clerk_user_id);
 }
 
+export type SavedScreenRow = {
+  id: number;
+  clerk_user_id: string;
+  name: string;
+  window_days: number;
+  min_agree: number;
+  min_usd: number;
+  buys_only: number;
+  industry: string | null;
+  created_at: number;
+};
+
+export type SavedScreenCriteria = {
+  name: string;
+  windowDays: number;
+  minAgree: number;
+  minUsd: number;
+  buysOnly: boolean;
+  industry: string | null;
+};
+
+const createSavedScreenSql = `INSERT INTO saved_screens
+   (clerk_user_id, name, window_days, min_agree, min_usd, buys_only, industry, created_at)
+ VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+
+export async function createSavedScreen(clerkUserId: string, criteria: SavedScreenCriteria): Promise<number> {
+  const result = await client.execute({
+    sql: createSavedScreenSql,
+    args: [
+      clerkUserId,
+      criteria.name,
+      criteria.windowDays,
+      criteria.minAgree,
+      criteria.minUsd,
+      criteria.buysOnly ? 1 : 0,
+      criteria.industry,
+      Date.now(),
+    ],
+  });
+  return Number(result.lastInsertRowid);
+}
+
+const savedScreensForUserSql = `SELECT * FROM saved_screens WHERE clerk_user_id = ? ORDER BY created_at DESC`;
+
+export async function getSavedScreensForUser(clerkUserId: string): Promise<SavedScreenRow[]> {
+  const result = await client.execute({ sql: savedScreensForUserSql, args: [clerkUserId] });
+  return result.rows as unknown as SavedScreenRow[];
+}
+
+const allSavedScreensSql = `SELECT * FROM saved_screens`;
+
+/** For the alert cron — every saved screen across every user, filtered down to active subscribers by the caller. */
+export async function getAllSavedScreens(): Promise<SavedScreenRow[]> {
+  const result = await client.execute(allSavedScreensSql);
+  return result.rows as unknown as SavedScreenRow[];
+}
+
+const deleteSavedScreenSql = `DELETE FROM saved_screens WHERE id = ? AND clerk_user_id = ?`;
+const deleteSavedScreenSeenSql = `DELETE FROM saved_screen_seen_tickers WHERE screen_id = ?`;
+
+export async function deleteSavedScreen(clerkUserId: string, screenId: number): Promise<void> {
+  await client.execute({ sql: deleteSavedScreenSql, args: [screenId, clerkUserId] });
+  await client.execute({ sql: deleteSavedScreenSeenSql, args: [screenId] });
+}
+
+const seenTickersForScreenSql = `SELECT ticker FROM saved_screen_seen_tickers WHERE screen_id = ?`;
+
+export async function getSeenTickersForScreen(screenId: number): Promise<Set<string>> {
+  const result = await client.execute({ sql: seenTickersForScreenSql, args: [screenId] });
+  return new Set((result.rows as unknown as { ticker: string }[]).map((r) => r.ticker));
+}
+
+const markTickerSeenSql = `INSERT OR IGNORE INTO saved_screen_seen_tickers (screen_id, ticker, seen_at) VALUES (?, ?, ?)`;
+
+/** Marks tickers as already-alerted-on for this screen, so the next check only ever surfaces
+ * genuinely new matches — also used once at screen-creation time to seed the current matches
+ * (see createScreen() in screens.ts), so a fresh screen doesn't immediately email every existing
+ * match the moment the ingest cron next runs. */
+export async function markTickersSeenForScreen(screenId: number, tickers: string[]): Promise<void> {
+  if (tickers.length === 0) return;
+  const now = Date.now();
+  await client.batch(
+    tickers.map((t) => ({ sql: markTickerSeenSql, args: [screenId, t, now] })),
+    "write"
+  );
+}
+
 const upsertTickerMetadataSql = `INSERT INTO ticker_metadata (ticker, sic_code, industry, updated_at)
    VALUES (?, ?, ?, ?)
    ON CONFLICT(ticker) DO UPDATE SET sic_code = excluded.sic_code, industry = excluded.industry, updated_at = excluded.updated_at`;

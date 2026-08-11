@@ -1,15 +1,16 @@
 import "server-only";
 import { ingestTransactions } from "@/lib/ingest";
 import { sendWatchlistAlerts } from "@/lib/alerts";
+import { checkSavedScreensAndAlert } from "@/lib/screens";
 import { backfillPreviousQuarterHoldings, ingestInstitutionalHoldings } from "@/lib/institutional";
 import { checkAndPostTwitterSignals } from "@/lib/twitterBot";
 import { ingestNewForm3Positions, backfillNextTicker } from "@/lib/insiderPositions";
 
 /**
- * The 5-min cycle: Form 4 ingest → watchlist alert emails for anything new → Twitter bot check →
- * real-time Form 3 (new insider) feed. Shared between local dev's setInterval loop
- * (instrumentation.ts) and the production /api/cron/ingest route — same logic either way, only
- * the trigger differs.
+ * The 5-min cycle: Form 4 ingest → watchlist alert emails for anything new → saved-screen alert
+ * emails for anything newly matching → Twitter bot check → real-time Form 3 (new insider) feed.
+ * Shared between local dev's setInterval loop (instrumentation.ts) and the production
+ * /api/cron/ingest route — same logic either way, only the trigger differs.
  */
 export async function runIngestCycle(): Promise<void> {
   try {
@@ -21,6 +22,16 @@ export async function runIngestCycle(): Promise<void> {
     if (result.newTransactions.length > 0) {
       const { emailsSent } = await sendWatchlistAlerts(result.newTransactions);
       if (emailsSent > 0) console.log(`[alerts] ${emailsSent} E-Mails verschickt`);
+
+      // A saved screen's matching set can only change when new transactions land, same gating
+      // as the watchlist check above — skip the (relatively expensive, one signals-pipeline-run
+      // per screen) check entirely on a quiet cycle.
+      try {
+        const { emailsSent: screenEmailsSent } = await checkSavedScreensAndAlert();
+        if (screenEmailsSent > 0) console.log(`[screens] ${screenEmailsSent} Screen-Alert-E-Mails verschickt`);
+      } catch (err) {
+        console.error("[screens] fehlgeschlagen:", err);
+      }
     }
   } catch (err) {
     console.error("[ingest] fehlgeschlagen:", err);
