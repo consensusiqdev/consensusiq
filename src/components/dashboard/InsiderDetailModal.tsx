@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Transaction } from "@/types/filing";
-import type { SharesHistoryPoint } from "@/lib/insiderDetail";
+import type { InsiderTransaction, SharesHistoryPoint, TrackRecord } from "@/lib/insiderDetail";
 import Badge from "@/components/ui/Badge";
 import SharesHistoryChart from "@/components/ui/SharesHistoryChart";
 import { fmtDate, fmtShares, fmtUsd, sideChipClass } from "@/lib/format";
@@ -14,8 +13,9 @@ type Detail = {
   ticker: string;
   companyName: string;
   currentShares: number | null;
-  transactions: Transaction[];
+  transactions: InsiderTransaction[];
   sharesHistory: SharesHistoryPoint[];
+  trackRecord: TrackRecord;
 };
 
 /** Reusable insider-detail modal — opened from both CompanyInsidersClient (roster on
@@ -129,6 +129,21 @@ export default function InsiderDetailModal({
               />
             </div>
 
+            {(detail.trackRecord.totalBuys > 0 || detail.trackRecord.totalSells > 0) && (
+              <div className="mt-4 rounded-lg border border-border bg-bg-panel-2 px-3 py-2.5">
+                <p className="font-mono text-[9.5px] uppercase tracking-wide text-text-faint">
+                  Track Record bei {detail.ticker}
+                </p>
+                <p className="mt-1.5 font-mono text-[11.5px] leading-relaxed text-text-dim">
+                  <b className="text-text">{detail.trackRecord.totalBuys}</b> Käufe, davon{" "}
+                  <b className="text-text">{detail.trackRecord.buysInCluster}</b> als Teil eines
+                  Insider-Konsens (3+ gleichzeitig aktive Insider) ·{" "}
+                  <b className="text-text">{detail.trackRecord.totalSells}</b> Verkäufe, davon{" "}
+                  <b className="text-text">{detail.trackRecord.sellsInCluster}</b> im Konsens.
+                </p>
+              </div>
+            )}
+
             <div className="mt-4 rounded-lg border border-border bg-bg-panel-2 px-3 py-2.5">
               <p className="font-mono text-[9.5px] uppercase tracking-wide text-text-faint">
                 Aktienbestand über Zeit
@@ -157,6 +172,9 @@ export default function InsiderDetailModal({
                       <span className="text-text-dim">{fmtShares(t.shares)} Aktien</span>
                       <span className="text-text-faint">· {fmtUsd(t.valueUsd)}</span>
                       <span className="text-text-faint">· Code {t.transactionCode}</span>
+                      {t.clusterParticipants > 1 && (
+                        <span className="text-accent">· {t.clusterParticipants} Insider gleichzeitig aktiv</span>
+                      )}
                       <span className="ml-auto text-text-faint">{fmtDate(t.transactionDate)}</span>
                     </a>
                   </li>
