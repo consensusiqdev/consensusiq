@@ -11,6 +11,18 @@ export type DashboardFilters = {
   industry: string;
 };
 
+export const DEFAULT_FILTERS: DashboardFilters = {
+  windowDays: 14,
+  minAgree: 3,
+  minUsd: 1000,
+  // Multi-insider BUY clusters are genuinely rare (most Form 4 activity is routine selling) —
+  // defaulting to buys-only would leave a near-empty dashboard until enough buy data
+  // accumulates. Off by default; the checkbox is still there for anyone who wants it.
+  buysOnly: false,
+  sortBy: "score",
+  industry: "",
+};
+
 const SORT_LABELS: Record<SortOption, string> = {
   consensus: "Stärkster Konsens",
   exposure: "Größtes Volumen",

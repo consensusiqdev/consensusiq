@@ -1,13 +1,21 @@
 import Link from "next/link";
 import TopBar from "@/components/Layout/TopBar";
 import DashboardClient from "@/components/dashboard/DashboardClient";
+import { DEFAULT_FILTERS } from "@/components/dashboard/FilterBar";
+import { getDashboardInitialData } from "@/lib/signalsQuery";
 
-export default function DashboardPage() {
+// New Form-4 filings ingest every 5 min (see cron/ingest) — matches that cadence so the
+// server-rendered initial paint doesn't go stale for long between real data changes.
+export const revalidate = 300;
+
+export default async function DashboardPage() {
+  const initialData = await getDashboardInitialData(DEFAULT_FILTERS);
+
   return (
     <main className="min-h-screen bg-bg text-text">
       <div className="mx-auto max-w-7xl px-6 py-8 sm:px-10 sm:py-10">
         <TopBar />
-        <DashboardClient />
+        <DashboardClient initialData={initialData} />
 
         <footer className="mt-8 border-t border-border-soft pt-4 font-mono text-[11.5px] leading-relaxed text-text-faint">
           <p>

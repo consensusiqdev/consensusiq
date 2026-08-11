@@ -1,44 +1,42 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FilerSummary, TickerSignal, Transaction } from "@/types/filing";
-import FilterBar, { type DashboardFilters } from "@/components/dashboard/FilterBar";
+import FilterBar, { DEFAULT_FILTERS, type DashboardFilters } from "@/components/dashboard/FilterBar";
 import KPIGrid from "@/components/dashboard/KPIGrid";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import TickerDetailModal from "@/components/dashboard/TickerDetailModal";
 import InsiderDetailModal from "@/components/dashboard/InsiderDetailModal";
-
-const DEFAULT_FILTERS: DashboardFilters = {
-  windowDays: 14,
-  minAgree: 3,
-  minUsd: 1000,
-  // Multi-insider BUY clusters are genuinely rare (most Form 4 activity is routine selling) —
-  // defaulting to buys-only would leave a near-empty dashboard until enough buy data
-  // accumulates. Off by default; the checkbox is still there for anyone who wants it.
-  buysOnly: false,
-  sortBy: "score",
-  industry: "",
-};
+import type { DashboardData } from "@/lib/signalsQuery";
 
 const MIN_USD_DEBOUNCE_MS = 400;
 const FILTERS_STORAGE_KEY = "insider-align-filters";
 
-export default function DashboardClient() {
+/** `initialData` is fetched server-side for DEFAULT_FILTERS specifically (see dashboard/page.tsx)
+ * so the very first paint already has real content — without it, this component briefly rendered
+ * with empty arrays and then popped in up to 10 ticker cards once the client fetch resolved, which
+ * was the dashboard's dominant Cumulative Layout Shift contributor (Speed Insights flagged
+ * CLS 0.58 / RES 60, both far worse than every other route). */
+export default function DashboardClient({ initialData }: { initialData: DashboardData }) {
   const [filters, setFilters] = useState<DashboardFilters>(DEFAULT_FILTERS);
   const [filtersHydrated, setFiltersHydrated] = useState(false);
   const [debouncedMinUsd, setDebouncedMinUsd] = useState(filters.minUsd);
-  const [filers, setFilers] = useState<FilerSummary[]>([]);
-  const [signals, setSignals] = useState<TickerSignal[]>([]);
-  const [topBuys, setTopBuys] = useState<Transaction[]>([]);
-  const [totalInsidersTracked, setTotalInsidersTracked] = useState(0);
-  const [currentMonthValueUsd, setCurrentMonthValueUsd] = useState<number | null>(null);
-  const [previousMonthValueUsd, setPreviousMonthValueUsd] = useState<number | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [filers, setFilers] = useState<FilerSummary[]>(initialData.filers);
+  const [signals, setSignals] = useState<TickerSignal[]>(initialData.signals);
+  const [topBuys, setTopBuys] = useState<Transaction[]>(initialData.topBuys);
+  const [totalInsidersTracked, setTotalInsidersTracked] = useState(initialData.totalInsidersTracked);
+  const [currentMonthValueUsd, setCurrentMonthValueUsd] = useState<number | null>(initialData.currentMonthValueUsd);
+  const [previousMonthValueUsd, setPreviousMonthValueUsd] = useState<number | null>(initialData.previousMonthValueUsd);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [detailTicker, setDetailTicker] = useState<string | null>(null);
   const [selectedFiler, setSelectedFiler] = useState<{ ticker: string; filerId: string } | null>(null);
+  // The very first fetch-effect run, if the restored filters turn out to still be the defaults,
+  // would just re-fetch the exact same data initialData already has — skip that one round trip.
+  // A restored NON-default filter set still needs its own fetch, same as a manual refresh.
+  const skipNextFetchRef = useRef(true);
 
   // Restore persisted filters once on mount — deliberately a useEffect (not a lazy useState
   // initializer) since this component's page is statically prerendered; reading localStorage
@@ -62,6 +60,18 @@ export default function DashboardClient() {
 
   useEffect(() => {
     if (!filtersHydrated) return;
+
+    if (skipNextFetchRef.current) {
+      skipNextFetchRef.current = false;
+      const isStillDefaultFilters =
+        filters.windowDays === DEFAULT_FILTERS.windowDays &&
+        filters.minAgree === DEFAULT_FILTERS.minAgree &&
+        debouncedMinUsd === DEFAULT_FILTERS.minUsd &&
+        filters.buysOnly === DEFAULT_FILTERS.buysOnly &&
+        filters.sortBy === DEFAULT_FILTERS.sortBy;
+      if (isStillDefaultFilters && refreshNonce === 0) return; // initialData already covers this
+    }
+
     const controller = new AbortController();
     // Standard fetch-in-effect pattern (see react.dev/reference/react/useEffect#fetching-data-with-effects);
     // no data-fetching library in this project yet to hand this off to.
