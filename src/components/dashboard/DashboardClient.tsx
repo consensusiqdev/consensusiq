@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FilerSummary, TickerSignal, Transaction } from "@/types/filing";
 import FilterBar, { DEFAULT_FILTERS, type DashboardFilters } from "@/components/dashboard/FilterBar";
+import OnboardingBanner from "@/components/dashboard/OnboardingBanner";
 import KPIGrid from "@/components/dashboard/KPIGrid";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import TickerDetailModal from "@/components/dashboard/TickerDetailModal";
@@ -142,6 +143,8 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
 
   return (
     <>
+      <OnboardingBanner />
+
       <FilterBar
         filters={filters}
         onChange={handleChange}

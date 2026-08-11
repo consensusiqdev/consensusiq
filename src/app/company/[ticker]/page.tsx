@@ -4,6 +4,7 @@ import TopBar from "@/components/Layout/TopBar";
 import CompanyInsidersClient from "@/components/company/CompanyInsidersClient";
 import CompanyHistoryButton from "@/components/company/CompanyHistoryButton";
 import Badge from "@/components/ui/Badge";
+import CrossSignalBadge from "@/components/ui/CrossSignalBadge";
 import Sparkline from "@/components/ui/Sparkline";
 import EventItem from "@/components/dashboard/EventItem";
 import { getTickerDetail } from "@/lib/tickerDetail";
@@ -75,6 +76,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ ticker
               <Badge variant="accent">{detail.industry}</Badge>
             </Link>
           )}
+          <CrossSignalBadge events={detail.institutionalEvents} />
           <CompanyHistoryButton ticker={ticker} />
           <Link
             href={`/compare?a=${ticker}`}

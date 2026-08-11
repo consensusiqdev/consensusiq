@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { CompanyEvent, InstitutionalEvent, Transaction, TransactionSide } from "@/types/filing";
 import Badge from "@/components/ui/Badge";
 import WatchButton from "@/components/ui/WatchButton";
+import CrossSignalBadge from "@/components/ui/CrossSignalBadge";
 import Sparkline from "@/components/ui/Sparkline";
 import InsiderDetailModal from "@/components/dashboard/InsiderDetailModal";
 import EventItem from "@/components/dashboard/EventItem";
@@ -162,8 +163,11 @@ export default function TickerDetailModal({
                 <div className="font-mono text-[9.5px] uppercase tracking-wide text-text-faint">
                   Signal Score (30 Tage)
                 </div>
-                <div className="text-lg font-bold text-text">
-                  {detail.signalScore != null ? detail.signalScore : "—"}
+                <div className="flex items-center gap-2">
+                  <div className="text-lg font-bold text-text">
+                    {detail.signalScore != null ? detail.signalScore : "—"}
+                  </div>
+                  <CrossSignalBadge events={detail.institutionalEvents} />
                 </div>
               </div>
               <Sparkline points={detail.signalHistory} width={140} height={36} />

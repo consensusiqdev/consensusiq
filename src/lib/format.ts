@@ -90,6 +90,35 @@ export function institutionalChipClass(changeType: InstitutionalEvent["changeTyp
   return "other";
 }
 
+export type CrossSignalSummary = {
+  direction: "BUYING" | "SELLING" | "MIXED";
+  buyingFunds: number;
+  sellingFunds: number;
+  quarter: string;
+  label: string;
+};
+
+/** Cheap cross-signal hint for a ticker's page/modal: are the tracked 13F funds currently net
+ * buying or selling too, alongside the insider signal? Deliberately just a summary of the fund
+ * count and direction, NOT a combined score — the Signal Score and Smart-Money-Konsens-Score stay
+ * separate on purpose (see /methodik). Pure function over already-fetched events, no new query. */
+export function summarizeCrossSignal(events: InstitutionalEvent[]): CrossSignalSummary | null {
+  const buying = events.filter((e) => e.changeType === "OPENED" || e.changeType === "INCREASED");
+  const selling = events.filter((e) => e.changeType === "DECREASED" || e.changeType === "CLOSED");
+  if (buying.length === 0 && selling.length === 0) return null;
+
+  const direction = selling.length === 0 ? "BUYING" : buying.length === 0 ? "SELLING" : "MIXED";
+  const quarter = [...events].sort((a, b) => (a.quarter > b.quarter ? -1 : 1))[0].quarter.replace("-", " ");
+  const label =
+    direction === "BUYING"
+      ? `${buying.length} Fonds bauen auf`
+      : direction === "SELLING"
+        ? `${selling.length} Fonds bauen ab`
+        : `${buying.length} auf / ${selling.length} ab bei Fonds`;
+
+  return { direction, buyingFunds: buying.length, sellingFunds: selling.length, quarter, label };
+}
+
 export function sideChipClass(side: string): "yes" | "no" | "other" {
   if (side === "BUY") return "yes";
   if (side === "SELL") return "no";
