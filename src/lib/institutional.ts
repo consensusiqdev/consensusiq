@@ -13,14 +13,22 @@ import {
 } from "@/lib/db";
 import type { FundOverview, InstitutionalEvent, InstitutionalMove } from "@/types/filing";
 
+const UPSERT_CONCURRENCY = 10; // Turso rejected an unbounded Promise.all for a large fund
+// ("Database connections limit exceeded, try to reduce concurrency") — real incident, took down
+// an unrelated prod build (the "/institutional" static page also queries the DB, so it failed to
+// prerender while a huge batch of concurrent upserts was in flight). Same worker-pool pattern as
+// secEdgar.ts's fetchForm4Transactions(), just bounding DB writes instead of HTTP fetches.
+
 /** Resolves one 13F filing's CUSIPs to tickers and upserts every holding line — shared by the
  * regular latest-quarter ingest and the one-time previous-quarter backfill below. */
 async function ingestFiling(fund: InstitutionalFiler, filing: Form13F): Promise<number> {
   const tickerByCusip = await resolveCusipsToTickers(filing.holdings.map((h) => h.cusip));
 
-  await Promise.all(
-    filing.holdings.map((holding) =>
-      upsertInstitutionalHolding({
+  let idx = 0;
+  async function worker() {
+    while (idx < filing.holdings.length) {
+      const holding = filing.holdings[idx++];
+      await upsertInstitutionalHolding({
         fundCik: fund.cik,
         fundName: fund.name,
         cusip: holding.cusip,
@@ -31,9 +39,12 @@ async function ingestFiling(fund: InstitutionalFiler, filing: Form13F): Promise<
         valueUsd: holding.valueUsd,
         filedDate: filing.filedDate,
         sourceUrl: filing.sourceUrl,
-      })
-    )
-  );
+      });
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(UPSERT_CONCURRENCY, filing.holdings.length) }, () => worker());
+  await Promise.all(workers);
 
   return filing.holdings.length;
 }
