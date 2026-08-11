@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Space_Grotesk, IBM_Plex_Mono } from "next/font/google";
 import Script from "next/script";
 import { Analytics } from "@vercel/analytics/next";
@@ -7,6 +7,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import { SITE_INDEXABLE, SITE_NAME, SITE_URL } from "@/lib/seo";
+import ServiceWorkerRegister from "@/components/ui/ServiceWorkerRegister";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -48,6 +49,17 @@ export const metadata: Metadata = {
   // suspenders alongside robots.ts's full Disallow, in case some crawler ignores robots.txt.
   // No individual page sets its own `robots` field, so this value applies everywhere unchanged.
   ...(SITE_INDEXABLE ? {} : { robots: { index: false, follow: false } }),
+  // manifest.ts (App Router file convention) is auto-linked — no manual <link rel="manifest">
+  // needed. iOS ignores the web manifest for "Add to Home Screen" styling, hence appleWebApp here.
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: SITE_NAME,
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0b0d10", // matches manifest.ts's background/theme color and the brand mark's panel bg
 };
 
 const ORGANIZATION_JSON_LD = {
@@ -132,6 +144,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           {children}
           <Analytics />
           <SpeedInsights />
+          <ServiceWorkerRegister />
         </body>
       </html>
     </ClerkProvider>
