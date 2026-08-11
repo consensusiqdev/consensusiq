@@ -295,6 +295,50 @@ export async function markTickersSeenForScreen(screenId: number, tickers: string
   );
 }
 
+export type DigestFrequency = "daily" | "weekly";
+
+export type DigestPreferenceRow = {
+  clerk_user_id: string;
+  frequency: DigestFrequency;
+  last_sent_at: number | null;
+};
+
+/** Presence of a row = opted in at that frequency; no row = digest off. Changing frequency keeps
+ * the existing last_sent_at (doesn't reset the clock, e.g. switching daily→weekly mid-week
+ * shouldn't immediately trigger a fresh send). */
+export async function setDigestPreference(clerkUserId: string, frequency: DigestFrequency): Promise<void> {
+  await client.execute({
+    sql: `INSERT INTO digest_preferences (clerk_user_id, frequency, last_sent_at) VALUES (?, ?, NULL)
+          ON CONFLICT(clerk_user_id) DO UPDATE SET frequency = excluded.frequency`,
+    args: [clerkUserId, frequency],
+  });
+}
+
+export async function clearDigestPreference(clerkUserId: string): Promise<void> {
+  await client.execute({ sql: `DELETE FROM digest_preferences WHERE clerk_user_id = ?`, args: [clerkUserId] });
+}
+
+export async function getDigestPreference(clerkUserId: string): Promise<DigestPreferenceRow | null> {
+  const result = await client.execute({
+    sql: `SELECT * FROM digest_preferences WHERE clerk_user_id = ?`,
+    args: [clerkUserId],
+  });
+  return (result.rows[0] as unknown as DigestPreferenceRow) ?? null;
+}
+
+/** For the digest cron — every opted-in user, filtered down to active subscribers and "due" by the caller. */
+export async function getAllDigestPreferences(): Promise<DigestPreferenceRow[]> {
+  const result = await client.execute(`SELECT * FROM digest_preferences`);
+  return result.rows as unknown as DigestPreferenceRow[];
+}
+
+export async function markDigestSent(clerkUserId: string, sentAt: number): Promise<void> {
+  await client.execute({
+    sql: `UPDATE digest_preferences SET last_sent_at = ? WHERE clerk_user_id = ?`,
+    args: [sentAt, clerkUserId],
+  });
+}
+
 const upsertTickerMetadataSql = `INSERT INTO ticker_metadata (ticker, sic_code, industry, updated_at)
    VALUES (?, ?, ?, ?)
    ON CONFLICT(ticker) DO UPDATE SET sic_code = excluded.sic_code, industry = excluded.industry, updated_at = excluded.updated_at`;

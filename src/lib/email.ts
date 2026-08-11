@@ -136,3 +136,50 @@ export async function sendScreenAlertEmail(to: string, screenName: string, signa
     console.error("[email] Screen-Alert-Versand fehlgeschlagen:", error);
   }
 }
+
+/** Sends the opt-in daily/weekly digest: the top signals (by score) over the last 1 or 7 days. */
+export async function sendDigestEmail(to: string, frequency: "daily" | "weekly", signals: TickerSignal[]): Promise<void> {
+  const client = getResendClient();
+  if (!client) {
+    console.warn("[email] RESEND_API_KEY nicht gesetzt — Digest-E-Mail übersprungen.");
+    return;
+  }
+  const from = process.env.RESEND_FROM_EMAIL;
+  if (!from) {
+    console.warn("[email] RESEND_FROM_EMAIL nicht gesetzt — Digest-E-Mail übersprungen.");
+    return;
+  }
+  if (signals.length === 0) return;
+
+  const label = frequency === "weekly" ? "Wöchentlicher" : "Täglicher";
+  const periodLabel = frequency === "weekly" ? "letzten 7 Tage" : "letzten 24 Stunden";
+  const subject = `${label} InsiderAlign-Digest: ${signals.length} Top-Signal${signals.length === 1 ? "" : "e"}`;
+
+  const html = `
+    <div style="font-family:sans-serif;color:#1d1d1f;">
+      <h2 style="font-size:18px;">${label} Digest — Top-Signale der ${periodLabel}</h2>
+      <table style="border-collapse:collapse;width:100%;">
+        <thead>
+          <tr style="text-align:left;border-bottom:1px solid #d2d2d7;">
+            <th style="padding:6px 10px;font-size:11px;text-transform:uppercase;color:#6e6e73;">Seite</th>
+            <th style="padding:6px 10px;font-size:11px;text-transform:uppercase;color:#6e6e73;">Ticker</th>
+            <th style="padding:6px 10px;font-size:11px;text-transform:uppercase;color:#6e6e73;">Unternehmen</th>
+            <th style="padding:6px 10px;font-size:11px;text-transform:uppercase;color:#6e6e73;">Score</th>
+            <th style="padding:6px 10px;font-size:11px;text-transform:uppercase;color:#6e6e73;">Insider</th>
+            <th style="padding:6px 10px;font-size:11px;text-transform:uppercase;color:#6e6e73;">Volumen</th>
+          </tr>
+        </thead>
+        <tbody>${signals.map(renderScreenSignalRow).join("")}</tbody>
+      </table>
+      <p style="margin-top:20px;font-size:11px;color:#a1a1a6;">
+        Du bekommst diese E-Mail, weil du den ${label.toLowerCase()}n Digest abonniert hast.
+        Verwalten: <a href="${SITE_URL}/watchlist" style="color:#b8791f;">Einstellungen ansehen</a>.
+        Keine Finanzberatung.
+      </p>
+    </div>`;
+
+  const { error } = await client.emails.send({ from, to, subject, html });
+  if (error) {
+    console.error("[email] Digest-Versand fehlgeschlagen:", error);
+  }
+}

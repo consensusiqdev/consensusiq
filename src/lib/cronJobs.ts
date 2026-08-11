@@ -2,15 +2,17 @@ import "server-only";
 import { ingestTransactions } from "@/lib/ingest";
 import { sendWatchlistAlerts } from "@/lib/alerts";
 import { checkSavedScreensAndAlert } from "@/lib/screens";
+import { checkAndSendDigests } from "@/lib/digest";
 import { backfillPreviousQuarterHoldings, ingestInstitutionalHoldings } from "@/lib/institutional";
 import { checkAndPostTwitterSignals } from "@/lib/twitterBot";
 import { ingestNewForm3Positions, backfillNextTicker } from "@/lib/insiderPositions";
 
 /**
  * The 5-min cycle: Form 4 ingest → watchlist alert emails for anything new → saved-screen alert
- * emails for anything newly matching → Twitter bot check → real-time Form 3 (new insider) feed.
- * Shared between local dev's setInterval loop (instrumentation.ts) and the production
- * /api/cron/ingest route — same logic either way, only the trigger differs.
+ * emails for anything newly matching → digest emails for anyone due → Twitter bot check →
+ * real-time Form 3 (new insider) feed. Shared between local dev's setInterval loop
+ * (instrumentation.ts) and the production /api/cron/ingest route — same logic either way, only
+ * the trigger differs.
  */
 export async function runIngestCycle(): Promise<void> {
   try {
@@ -36,6 +38,16 @@ export async function runIngestCycle(): Promise<void> {
   } catch (err) {
     console.error("[ingest] fehlgeschlagen:", err);
     throw err;
+  }
+
+  // Unlike the two checks above, this is a TIME-based check (is a user's daily/weekly digest
+  // due), not a data-change check — must run every cycle regardless of whether new transactions
+  // landed this time. Own try/catch, same reasoning as Twitter below.
+  try {
+    const { emailsSent: digestEmailsSent } = await checkAndSendDigests();
+    if (digestEmailsSent > 0) console.log(`[digest] ${digestEmailsSent} Digest-E-Mails verschickt`);
+  } catch (err) {
+    console.error("[digest] fehlgeschlagen:", err);
   }
 
   // Own try/catch — a Twitter hiccup should never take down the core ingest cycle. Dry-run by

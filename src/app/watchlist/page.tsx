@@ -3,6 +3,7 @@ import TopBar from "@/components/Layout/TopBar";
 import WatchlistClient from "@/components/watchlist/WatchlistClient";
 import LocalWatchlistClient from "@/components/watchlist/LocalWatchlistClient";
 import SavedScreensClient from "@/components/watchlist/SavedScreensClient";
+import DigestPreferenceClient from "@/components/watchlist/DigestPreferenceClient";
 import { getActiveSubscriberId } from "@/lib/subscription";
 import { pageMetadata } from "@/lib/seo";
 
@@ -42,6 +43,15 @@ export default async function WatchlistPage() {
             </p>
             <div className="mt-6 rounded-xl border border-border bg-bg-panel p-5">
               <SavedScreensClient />
+            </div>
+
+            <h3 className="mt-8 text-xl font-bold text-text">E-Mail-Digest</h3>
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-text-dim">
+              Zusätzlich zu Echtzeit-Alerts: eine kuratierte Zusammenfassung der stärksten Signale,
+              täglich oder wöchentlich.
+            </p>
+            <div className="mt-6 rounded-xl border border-border bg-bg-panel p-5">
+              <DigestPreferenceClient />
             </div>
           </>
         ) : (
