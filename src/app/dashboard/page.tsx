@@ -32,7 +32,11 @@ export default async function DashboardPage() {
           <p className="mt-3 border-t border-dashed border-border-soft pt-3">
             <strong className="text-text-dim">Methodik &amp; Herausgeber</strong> (Angabe gemäß
             Art. 20 EU-Marktmissbrauchsverordnung i.V.m. Delegierter Verordnung (EU) 2016/958):
-            Herausgeber ist [Name/Firma, siehe Impressum]. Der „Signal Score&quot; (0–100) je
+            Herausgeber ist [Name/Firma, siehe{" "}
+            <Link href="/impressum" className="text-accent hover:underline">
+              Impressum
+            </Link>
+            ]. Der „Signal Score&quot; (0–100) je
             Ticker kombiniert zu gleichen Teilen (1) den Anteil der Insider auf der jeweils
             führenden Seite (Kauf/Verkauf) an allen im Zeitraum aktiven Insidern, (2) deren Anteil
             am gesamten gehandelten Dollar-Volumen und (3) den durchschnittlichen Anteil des
@@ -43,6 +47,11 @@ export default async function DashboardPage() {
             vor ihrer Verbreitung. InsiderAlign und sein Betreiber halten keine Positionen in den
             hier genannten Wertpapieren und erhalten keine Vergütung von den genannten
             Unternehmen. <Link href="/methodik" className="text-accent hover:underline">Ausführliche Methodik →</Link>
+          </p>
+
+          <p className="mt-3 border-t border-dashed border-border-soft pt-3">
+            Rechtliche Angaben zum Betreiber: <Link href="/impressum" className="hover:text-accent hover:underline">Impressum</Link>{" "}
+            · <Link href="/datenschutz" className="hover:text-accent hover:underline">Datenschutz</Link>
           </p>
         </footer>
       </div>

@@ -349,6 +349,25 @@ async function getCikForTicker(ticker: string): Promise<string | null> {
   return tickerCikMap.get(ticker.toUpperCase()) ?? null;
 }
 
+type CompanyTickersExchangeJson = { fields: string[]; data: [number, string, string, string | null][] };
+
+let exchangeListedCount: number | null = null;
+let exchangeListedCountLoadedAt = 0;
+
+/** Count of NYSE/Nasdaq-listed tickers per SEC EDGAR's own exchange mapping — used on /methodik as
+ * a coverage reference point. Note this also counts ETFs/trusts (e.g. SPY, QQQ), which never file
+ * their own Form 4, so it overstates the true target universe of operating companies. */
+export async function getExchangeListedCompanyCount(): Promise<number> {
+  const now = Date.now();
+  if (exchangeListedCount === null || now - exchangeListedCountLoadedAt > TICKER_CIK_TTL_MS) {
+    const res = await throttledFetch(`${SEC_BASE}/files/company_tickers_exchange.json`);
+    const json = (await res.json()) as CompanyTickersExchangeJson;
+    exchangeListedCount = json.data.filter((row) => row[3] === "Nasdaq" || row[3] === "NYSE").length;
+    exchangeListedCountLoadedAt = now;
+  }
+  return exchangeListedCount;
+}
+
 type SubmissionsJson = {
   sic?: string;
   sicDescription?: string;

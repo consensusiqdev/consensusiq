@@ -119,6 +119,14 @@ export async function getAllCompanies(): Promise<CompanyRow[]> {
   return result.rows as unknown as CompanyRow[];
 }
 
+const trackedCompanyCountSql = `SELECT COUNT(DISTINCT ticker) as count FROM transactions`;
+
+/** For the /methodik coverage stat — cheaper than fetching every row via getAllCompanies(). */
+export async function getTrackedCompanyCount(): Promise<number> {
+  const result = await client.execute(trackedCompanyCountSql);
+  return Number((result.rows[0] as unknown as { count: number }).count);
+}
+
 const mostRecentBuyBeforeSql = `SELECT transaction_date, price_per_share, shares, transaction_code FROM transactions
    WHERE filer_id = ? AND ticker = ? AND side = 'BUY' AND transaction_date < ?
    ORDER BY transaction_date DESC LIMIT 1`;

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import TopBar from "@/components/Layout/TopBar";
+import { getTrackedCompanyCount } from "@/lib/db";
+import { getExchangeListedCompanyCount } from "@/lib/secEdgar";
 
 export const metadata: Metadata = {
   title: "Methodik | InsiderAlign",
@@ -8,7 +10,15 @@ export const metadata: Metadata = {
     "Wie InsiderAlign den Signal Score berechnet, welche Daten einfließen und die gesetzlichen Pflichtangaben nach Art. 20 EU-Marktmissbrauchsverordnung.",
 };
 
-export default function MethodikPage() {
+// SEC's exchange-ticker list only changes as new listings/delistings happen — daily refresh is plenty.
+export const revalidate = 3600;
+
+export default async function MethodikPage() {
+  const [trackedCompanyCount, exchangeListedCompanyCount] = await Promise.all([
+    getTrackedCompanyCount(),
+    getExchangeListedCompanyCount(),
+  ]);
+
   return (
     <main className="min-h-screen bg-bg text-text">
       <div className="mx-auto max-w-3xl px-6 py-8 sm:px-10 sm:py-10">
@@ -30,6 +40,21 @@ export default function MethodikPage() {
               erhebt keine eigenen Daten. Zwischen dem eigentlichen Handel und der Veröffentlichung
               der Meldung liegen typischerweise rund zwei Werktage; die auf dem Dashboard gezeigten
               Signale spiegeln also offengelegten Handel wider, nicht Echtzeit-Transaktionen.
+            </p>
+          </section>
+
+          <section>
+            <h3 className="text-[15px] font-semibold text-text">Abdeckung</h3>
+            <p className="mt-2">
+              InsiderAlign verfolgt aktuell <b className="text-text">{trackedCompanyCount}</b> Unternehmen
+              mit mindestens einer erfassten Form-4-Meldung — von rund{" "}
+              <b className="text-text">{exchangeListedCompanyCount.toLocaleString("de-DE")}</b> an NYSE
+              und Nasdaq gelisteten Tickern laut SEC EDGAR. Diese Vergleichszahl enthält auch ETFs,
+              Trusts und andere Produkte ohne eigene Vorstände/Directors, die nie eine Form-4-Meldung
+              haben werden — die tatsächliche Abdeckung unter operativ tätigen Unternehmen liegt also
+              höher, als der reine Bruchteil nahelegt. Es gibt kein festes Ziel-Universum: Jede neu
+              eingehende SEC-Form-4-Meldung wird automatisch aufgenommen, die Liste wächst laufend an
+              Handelstagen.
             </p>
           </section>
 
