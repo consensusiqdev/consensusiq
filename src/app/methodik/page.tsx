@@ -75,15 +75,36 @@ export default function MethodikPage() {
           <section>
             <h3 className="text-[15px] font-semibold text-text">Institutionelle 13F-Daten</h3>
             <p className="mt-2">
-              Zusätzlich beobachtet InsiderAlign die quartalsweisen SEC-Form-13F-Meldungen von 10
+              Zusätzlich beobachtet InsiderAlign die quartalsweisen SEC-Form-13F-Meldungen von 20
               ausgewählten &bdquo;Smart Money&ldquo;-Fonds (u. a. Berkshire Hathaway, Renaissance
-              Technologies, Citadel Advisors, ARK, Pershing Square) — nicht das gesamte Universum
-              der ca. 5.000+ 13F-Pflichtigen. Positions-Änderungen werden quartalsweise verglichen:
-              eine neue Position gilt als &bdquo;eröffnet&ldquo;, eine komplett verschwundene als
+              Technologies, Citadel Advisors, ARK, Pershing Square, Elliott Investment Management) —
+              nicht das gesamte Universum der ca. 5.000+ 13F-Pflichtigen, und bewusst ohne breite
+              Indexfonds (Vanguard, BlackRock etc.), deren 13F nur die jeweilige Indexgewichtung
+              spiegelt. Positions-Änderungen werden quartalsweise verglichen: eine neue Position
+              gilt als &bdquo;eröffnet&ldquo;, eine komplett verschwundene als
               &bdquo;geschlossen&ldquo; (13F listet nur aktuelle Bestände, ein Ausstieg wird also
               aus dem Fehlen einer Zeile geschlossen, nicht aus einer expliziten Null). 13F-Daten
               sind grundsätzlich bis zu 45 Tage alt (gesetzliche Meldefrist nach Quartalsende) und
               erfassen keine Nachmeldungen/Amendments.
+            </p>
+            <p className="mt-3">
+              Der &bdquo;Smart-Money-Konsens&ldquo;-Score (0–100, auf{" "}
+              <Link href="/institutional" className="text-accent hover:underline">
+                /institutional
+              </Link>
+              ) überträgt dieselbe Logik wie der Signal Score auf institutionelle Daten: rollierend
+              über die letzten bis zu 4 verfügbaren Quartale wird pro Aktie verglichen, wie viele
+              der 20 Fonds ihre Position auf- bzw. abgebaut haben. Der Score ist zu gleichen Teilen
+              zusammengesetzt aus (1) dem Anteil der Fonds auf der führenden Seite an allen in
+              dieser Aktie aktiven Fonds, (2) deren Anteil am gesamten bewegten Dollar-Volumen und
+              (3) dem durchschnittlichen Anteil des jeweiligen Portfolio-Gewichts, das neu
+              hinzukam bzw. abgebaut wurde — ein Fonds, der eine Position von 0 auf 3 % seines
+              Portfolios aufbaut, zählt stärker als einer, der eine bereits große Position nur
+              geringfügig aufstockt. Aufbau-geführter Konsens wird mit ×1,15 gewichtet,
+              Abbau-geführter mit ×0,85 — dieselbe Asymmetrie wie beim Insider-Signal-Score.
+              Mindestens 2 Fonds müssen in der Aktie aktiv sein, damit ein Score berechnet wird.
+              Bewusst getrennt vom Insider-Signal-Score gehalten (kein kombiniertes Cross-Signal,
+              Stand heute).
             </p>
           </section>
 

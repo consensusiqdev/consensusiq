@@ -3,22 +3,32 @@ import Link from "next/link";
 import TopBar from "@/components/Layout/TopBar";
 import Badge from "@/components/ui/Badge";
 import FundHoldingsList from "@/components/institutional/FundHoldingsList";
-import { getBiggestInstitutionalMoves, getInstitutionalOverview } from "@/lib/institutional";
+import { computeInstitutionalConsensus, getBiggestInstitutionalMoves, getInstitutionalOverview } from "@/lib/institutional";
 import { INSTITUTIONAL_FILERS } from "@/lib/institutionalFilers";
 import { fmtDate, fmtPct, fmtUsd } from "@/lib/format";
 import { pageMetadata } from "@/lib/seo";
-import type { FundOverview, InstitutionalMove } from "@/types/filing";
+import type { FundOverview, InstitutionalConsensusSignal, InstitutionalMove } from "@/types/filing";
 
 export const metadata: Metadata = pageMetadata({
   title: "Institutionelle Investoren — 13F-Holdings | InsiderAlign",
-  description: `Die letzten SEC-13F-Meldungen von ${INSTITUTIONAL_FILERS.length} beobachteten "Smart Money"-Fonds (Berkshire Hathaway, Renaissance Technologies, Citadel, ARK u.a.) — alle Positionen pro Fonds plus die größten Auf-/Abstockungen zum Vorquartal.`,
+  description: `Die letzten SEC-13F-Meldungen von ${INSTITUTIONAL_FILERS.length} beobachteten "Smart Money"-Fonds (Berkshire Hathaway, Renaissance Technologies, Citadel, ARK u.a.) — Smart-Money-Konsens, größte Auf-/Abstockungen und alle Positionen pro Fonds.`,
   path: "/institutional",
 });
 
 export const revalidate = 3600; // 13F only refreshes 1x/24h server-side, no reason to compute this more often
 
+function scoreTierClass(score: number): string {
+  if (score >= 80) return "border-accent text-accent";
+  if (score >= 50) return "border-border text-text-dim";
+  return "border-border text-text-faint";
+}
+
 export default async function InstitutionalPage() {
-  const [funds, moves] = await Promise.all([getInstitutionalOverview(), getBiggestInstitutionalMoves()]);
+  const [funds, moves, consensus] = await Promise.all([
+    getInstitutionalOverview(),
+    getBiggestInstitutionalMoves(),
+    computeInstitutionalConsensus(),
+  ]);
   const fundCount = INSTITUTIONAL_FILERS.length;
 
   return (
@@ -36,6 +46,24 @@ export default async function InstitutionalPage() {
           sind verpflichtend innerhalb von 45 Tagen nach Quartalsende, spiegeln also den Bestand
           zum Quartalsende wider, nicht den aktuellen Stand.
         </p>
+
+        {consensus.length > 0 && (
+          <div className="mt-6 rounded-xl border border-border bg-bg-panel p-5">
+            <h3 className="text-[13px] font-semibold uppercase tracking-wide text-text-dim">
+              Smart-Money-Konsens
+            </h3>
+            <p className="mt-1 font-mono text-[11px] text-text-faint">
+              Fonds, die unabhängig voneinander in dieselbe Richtung umschichten — rollierend über
+              die letzten {Math.max(...consensus.map((c) => c.quartersUsed))} verfügbaren
+              Quartale, mindestens 2 Fonds aktiv.
+            </p>
+            <div className="mt-4 space-y-2">
+              {consensus.map((c) => (
+                <ConsensusRow key={c.ticker} c={c} />
+              ))}
+            </div>
+          </div>
+        )}
 
         {(moves.increases.length > 0 || moves.decreases.length > 0) && (
           <div className="mt-6 rounded-xl border border-border bg-bg-panel p-5">
@@ -59,6 +87,42 @@ export default async function InstitutionalPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+function ConsensusRow({ c }: { c: InstitutionalConsensusSignal }) {
+  const activeFunds = c.fundsAccumulating + c.fundsDistributing;
+  const leadCount = c.leadSide === "ACCUMULATING" ? c.fundsAccumulating : c.fundsDistributing;
+
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-bg-panel-2 px-3 py-2.5">
+      <div
+        className={`flex shrink-0 flex-col items-center justify-center rounded-md border px-2 py-1 ${scoreTierClass(c.consensusScore)}`}
+      >
+        <span className="font-mono text-[14px] font-bold leading-none">{c.consensusScore}</span>
+        <span className="mt-0.5 font-mono text-[8px] uppercase leading-none tracking-wide">Score</span>
+      </div>
+
+      <Link
+        href={`/company/${c.ticker}`}
+        className="text-[13.5px] font-semibold text-text hover:underline hover:decoration-accent"
+      >
+        <span className="font-mono text-accent">{c.ticker}</span>{" "}
+        <span className="text-text-dim">{c.companyName}</span>
+      </Link>
+
+      <span className="ml-auto whitespace-nowrap font-mono text-[11px] text-text-dim">
+        <b className="text-text">
+          {leadCount}/{activeFunds}
+        </b>{" "}
+        Fonds bei „{c.leadSide === "ACCUMULATING" ? "Aufbau" : "Abbau"}“
+      </span>
+
+      <span className="whitespace-nowrap font-mono text-[11px] text-text-faint">
+        {c.netValueChangeUsd >= 0 ? "+" : ""}
+        {fmtUsd(c.netValueChangeUsd)} netto · {c.quartersUsed} Quartale
+      </span>
+    </div>
   );
 }
 

@@ -7,11 +7,19 @@ import {
   getFundLatestQuarters,
   getFundQuarterFiling,
   getFundRecentQuarters,
+  getFundTotalsForQuarters,
+  getHoldingsForQuarters,
   getInstitutionalActivity,
+  getRecentGlobalQuarters,
   upsertInstitutionalHolding,
   type InstitutionalHoldingRow,
 } from "@/lib/db";
-import type { FundOverview, InstitutionalEvent, InstitutionalMove } from "@/types/filing";
+import type {
+  FundOverview,
+  InstitutionalConsensusSignal,
+  InstitutionalEvent,
+  InstitutionalMove,
+} from "@/types/filing";
 
 const UPSERT_CONCURRENCY = 10; // Turso rejected an unbounded Promise.all for a large fund
 // ("Database connections limit exceeded, try to reduce concurrency") — real incident, took down
@@ -325,4 +333,125 @@ export async function getBiggestInstitutionalMoves(limit = 15): Promise<{
     .slice(0, limit);
 
   return { increases, decreases };
+}
+
+const CONSENSUS_WINDOW_QUARTERS = 4; // ~1 year rolling window
+const MIN_ACTIVE_FUNDS = 2; // below this a "cluster" is just one fund's own decision, not a consensus
+
+type FundTickerTrend = { fundCik: string; fundName: string; start: number; end: number; startWeight: number; endWeight: number };
+
+/**
+ * Cross-fund "smart money consensus" score per ticker, rolled up over however many of the last 4
+ * global calendar quarters each fund actually has on record (2-4 — the rolling window grows as
+ * more history gets backfilled; see the 2026-08-11 backfill work). Structurally mirrors
+ * consensus.ts's summarizeTickers() — same "3-component average × side-multiplier" shape — but
+ * built from institutional position changes instead of Form-4 insider trades. Deliberately kept
+ * separate from the insider signal for now (a combined cross-signal is a possible follow-up).
+ *
+ * For each fund that has ≥2 of the window's quarters on record for a given ticker, compares its
+ * EARLIEST vs LATEST recorded value within the window (not consecutive-quarter deltas — a fund
+ * that only has 2 of the 4 quarters, e.g. one just added to the tracked list, still contributes a
+ * meaningful start→end comparison over whatever span it actually has).
+ */
+export async function computeInstitutionalConsensus(limit = 20): Promise<InstitutionalConsensusSignal[]> {
+  const quarters = await getRecentGlobalQuarters(CONSENSUS_WINDOW_QUARTERS);
+  if (quarters.length < 2) return []; // no rolling comparison possible yet
+
+  const [holdings, fundTotals] = await Promise.all([getHoldingsForQuarters(quarters), getFundTotalsForQuarters(quarters)]);
+
+  // ticker -> fund_cik -> quarter -> value_usd
+  const byTicker = new Map<string, Map<string, Map<string, number>>>();
+  const companyNameByTicker = new Map<string, string>();
+  const fundNameByCik = new Map<string, string>();
+
+  for (const h of holdings) {
+    fundNameByCik.set(h.fund_cik, h.fund_name);
+    companyNameByTicker.set(h.ticker, h.issuer_name);
+    let byFund = byTicker.get(h.ticker);
+    if (!byFund) {
+      byFund = new Map();
+      byTicker.set(h.ticker, byFund);
+    }
+    let byQuarter = byFund.get(h.fund_cik);
+    if (!byQuarter) {
+      byQuarter = new Map();
+      byFund.set(h.fund_cik, byQuarter);
+    }
+    byQuarter.set(h.quarter, (byQuarter.get(h.quarter) ?? 0) + (h.value_usd ?? 0));
+  }
+
+  const sortedQuarters = [...quarters].sort(); // "YYYY-QN" sorts chronologically ascending as a string
+  const signals: InstitutionalConsensusSignal[] = [];
+
+  for (const [ticker, byFund] of byTicker) {
+    const trends: FundTickerTrend[] = [];
+
+    for (const [fundCik, byQuarter] of byFund) {
+      const quartersPresent = sortedQuarters.filter((q) => byQuarter.has(q));
+      if (quartersPresent.length < 2) continue; // only one data point — no trend to measure
+
+      const firstQ = quartersPresent[0];
+      const lastQ = quartersPresent[quartersPresent.length - 1];
+      const start = byQuarter.get(firstQ)!;
+      const end = byQuarter.get(lastQ)!;
+      if (start === end) continue; // unchanged — not part of a "move"
+
+      const startTotal = fundTotals.get(`${fundCik}:${firstQ}`) ?? 0;
+      const endTotal = fundTotals.get(`${fundCik}:${lastQ}`) ?? 0;
+      trends.push({
+        fundCik,
+        fundName: fundNameByCik.get(fundCik) ?? fundCik,
+        start,
+        end,
+        startWeight: startTotal > 0 ? start / startTotal : 0,
+        endWeight: endTotal > 0 ? end / endTotal : 0,
+      });
+    }
+
+    if (trends.length < MIN_ACTIVE_FUNDS) continue;
+
+    const accumulating = trends.filter((t) => t.end > t.start);
+    const distributing = trends.filter((t) => t.end < t.start);
+    const leadSide: "ACCUMULATING" | "DISTRIBUTING" = accumulating.length >= distributing.length ? "ACCUMULATING" : "DISTRIBUTING";
+    const leading = leadSide === "ACCUMULATING" ? accumulating : distributing;
+
+    const headcountRatio = leading.length / trends.length;
+
+    const totalAbsChange = trends.reduce((sum, t) => sum + Math.abs(t.end - t.start), 0);
+    const leadingAbsChange = leading.reduce((sum, t) => sum + Math.abs(t.end - t.start), 0);
+    const dollarWeightedRatio = totalAbsChange > 0 ? leadingAbsChange / totalAbsChange : 0;
+
+    // How much of the fund's OWN portfolio conviction shifted into (or out of) this position,
+    // not just headline dollars — a $50M add is trivial for a $600B portfolio but everything for
+    // a $2B one. Mirrors pctOfPriorHoldings()'s "ratio of a reference base" shape: bounded (0,1),
+    // a brand-new position (startWeight 0) scores the max 1, a fully-closed one (endWeight 0)
+    // scores the min 0 — consistent with "how much of the after-state is the new side."
+    const convictionRatios = leading.map((t) => (t.endWeight + t.startWeight > 0 ? t.endWeight / (t.endWeight + t.startWeight) : 0));
+    const avgConvictionRatio = convictionRatios.reduce((sum, r) => sum + r, 0) / convictionRatios.length;
+
+    const rawScore = 100 * ((headcountRatio + dollarWeightedRatio + avgConvictionRatio) / 3);
+    const sideMultiplier = leadSide === "ACCUMULATING" ? 1.15 : 0.85;
+    const consensusScore = Math.round(Math.min(100, Math.max(0, rawScore * sideMultiplier)));
+
+    const netValueChangeUsd = trends.reduce((sum, t) => sum + (t.end - t.start), 0);
+    const quartersUsed = Math.max(...trends.map((t) => sortedQuarters.filter((q) => byFund.get(t.fundCik)?.has(q)).length));
+
+    signals.push({
+      ticker,
+      companyName: companyNameByTicker.get(ticker) ?? ticker,
+      fundsAccumulating: accumulating.length,
+      fundsDistributing: distributing.length,
+      leadSide,
+      headcountRatio,
+      dollarWeightedRatio,
+      avgConvictionRatio,
+      sideMultiplier,
+      consensusScore,
+      netValueChangeUsd,
+      quartersUsed,
+    });
+  }
+
+  signals.sort((a, b) => b.consensusScore - a.consensusScore || Math.abs(b.netValueChangeUsd) - Math.abs(a.netValueChangeUsd));
+  return signals.slice(0, limit);
 }

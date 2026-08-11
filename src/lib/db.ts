@@ -288,6 +288,50 @@ export async function getInstitutionalActivity(ticker: string): Promise<Institut
   return result.rows as unknown as InstitutionalHoldingRow[];
 }
 
+const recentGlobalQuartersSql = `SELECT DISTINCT quarter FROM institutional_holdings ORDER BY quarter DESC LIMIT ?`;
+
+/** The N most recent distinct quarters seen across ANY tracked fund — 13F periods are always
+ * calendar-quarter-end, so this single global list (not a per-fund one) is the right window for
+ * a cross-fund rolling score: every fund's "2026-Q1" means the same thing. */
+export async function getRecentGlobalQuarters(limit: number): Promise<string[]> {
+  const result = await client.execute({ sql: recentGlobalQuartersSql, args: [limit] });
+  return (result.rows as unknown as { quarter: string }[]).map((r) => r.quarter);
+}
+
+export type TickerQuarterHoldingRow = {
+  fund_cik: string;
+  fund_name: string;
+  ticker: string;
+  issuer_name: string;
+  quarter: string;
+  value_usd: number | null;
+};
+
+/** Every resolved-ticker holding line across a set of quarters — the raw material for the
+ * rolling institutional-consensus score, grouped/diffed by the caller per ticker per fund.
+ * Unresolved CUSIPs (ticker IS NULL) are excluded — can't attribute them to a company page. */
+export async function getHoldingsForQuarters(quarters: string[]): Promise<TickerQuarterHoldingRow[]> {
+  if (quarters.length === 0) return [];
+  const placeholders = quarters.map(() => "?").join(",");
+  const sql = `SELECT fund_cik, fund_name, ticker, issuer_name, quarter, value_usd
+     FROM institutional_holdings WHERE ticker IS NOT NULL AND quarter IN (${placeholders})`;
+  const result = await client.execute({ sql, args: quarters });
+  return result.rows as unknown as TickerQuarterHoldingRow[];
+}
+
+/** Each fund's total portfolio value per quarter (sum across ALL its holdings, not just one
+ * ticker) — needed to turn a raw position value into a portfolio-weight, the "conviction" signal
+ * for the institutional-consensus score (mirrors consensus.ts's pctOfPriorHoldings in spirit). */
+export async function getFundTotalsForQuarters(quarters: string[]): Promise<Map<string, number>> {
+  if (quarters.length === 0) return new Map();
+  const placeholders = quarters.map(() => "?").join(",");
+  const sql = `SELECT fund_cik, quarter, SUM(value_usd) as total
+     FROM institutional_holdings WHERE quarter IN (${placeholders}) GROUP BY fund_cik, quarter`;
+  const result = await client.execute({ sql, args: quarters });
+  const rows = result.rows as unknown as { fund_cik: string; quarter: string; total: number }[];
+  return new Map(rows.map((r) => [`${r.fund_cik}:${r.quarter}`, r.total]));
+}
+
 export type FundHoldingRow = {
   ticker: string | null;
   issuer_name: string;
