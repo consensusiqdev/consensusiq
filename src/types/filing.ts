@@ -58,6 +58,11 @@ export type Transaction = {
   // Excluded from the main consensus/signal-score computation for that reason (see /api/signals),
   // but still shown in the full per-ticker trade history for transparency.
   nearOffering: boolean;
+  // True if the reporting owner checked the Rule 10b5-1(c) trading-plan box on this Form 4 (SEC's
+  // own `aff10b5One` XML field, mandatory since the 2023 insider-trading-arrangements rule) — the
+  // trade was executed automatically on a pre-set schedule, not a spontaneous decision. Same
+  // "exclude from signal score, still shown for transparency" treatment as `nearOffering`.
+  isPlanTrade: boolean;
 };
 
 export type SideFiler = {

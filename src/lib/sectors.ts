@@ -62,6 +62,7 @@ export async function getSectorOverview(industry: string): Promise<SectorOvervie
       (r) =>
         (r.transaction_code === "P" || r.transaction_code === "S") &&
         r.near_offering !== 1 &&
+        r.is_plan_trade !== 1 &&
         tickersInIndustry.has(r.ticker)
     )
     .map((r, i) => ({
@@ -83,6 +84,7 @@ export async function getSectorOverview(industry: string): Promise<SectorOvervie
       sourceUrl: r.source_url,
       accessionNumber: "",
       nearOffering: r.near_offering === 1,
+      isPlanTrade: r.is_plan_trade === 1,
     }));
 
   const signals = computeConsensus(transactions, MIN_USD);

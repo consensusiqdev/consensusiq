@@ -59,10 +59,11 @@ export async function getFilteredSignals(query: SignalsQueryParams): Promise<Tic
     sourceUrl: r.source_url,
     accessionNumber: "",
     nearOffering: r.near_offering === 1,
+    isPlanTrade: r.is_plan_trade === 1,
   }));
 
   const openMarketOnly = allTransactions.filter(
-    (t) => (t.transactionCode === "P" || t.transactionCode === "S") && !t.nearOffering
+    (t) => (t.transactionCode === "P" || t.transactionCode === "S") && !t.nearOffering && !t.isPlanTrade
   );
   const currentOpenMarket = openMarketOnly.filter((t) => t.filedDate >= windowStart);
   const transactions = query.buysOnly ? currentOpenMarket.filter((t) => t.side === "BUY") : currentOpenMarket;
@@ -125,10 +126,11 @@ export async function getDashboardInitialData(query: SignalsQueryParams): Promis
     sourceUrl: r.source_url,
     accessionNumber: "",
     nearOffering: r.near_offering === 1,
+    isPlanTrade: r.is_plan_trade === 1,
   }));
 
   const openMarketOnly = allTransactions.filter(
-    (t) => (t.transactionCode === "P" || t.transactionCode === "S") && !t.nearOffering
+    (t) => (t.transactionCode === "P" || t.transactionCode === "S") && !t.nearOffering && !t.isPlanTrade
   );
   const currentOpenMarket = openMarketOnly.filter((t) => t.filedDate >= windowStart);
   const thisMonthOpenMarket = openMarketOnly.filter((t) => t.filedDate >= currentMonthStart);

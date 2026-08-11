@@ -31,7 +31,12 @@ export async function checkAndPostTwitterSignals(): Promise<void> {
   const rows = await getTransactionsSince(windowStart);
 
   const openMarketOnly: Transaction[] = rows
-    .filter((r) => (r.transaction_code === "P" || r.transaction_code === "S") && r.near_offering !== 1)
+    .filter(
+      (r) =>
+        (r.transaction_code === "P" || r.transaction_code === "S") &&
+        r.near_offering !== 1 &&
+        r.is_plan_trade !== 1
+    )
     .map((r, i) => ({
       id: `${r.ticker}:${r.filer_id}:${r.transaction_date}:${i}`,
       filerId: r.filer_id,
@@ -51,6 +56,7 @@ export async function checkAndPostTwitterSignals(): Promise<void> {
       sourceUrl: r.source_url,
       accessionNumber: "",
       nearOffering: false, // already filtered out above
+      isPlanTrade: false, // already filtered out above
     }));
 
   const signals = computeConsensus(openMarketOnly, 1000);

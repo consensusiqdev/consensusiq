@@ -9,8 +9,8 @@ const client = createClient({
 
 const insertTransactionSql = `INSERT OR IGNORE INTO transactions
    (source_id, filer_type, filer_id, filer_name, filer_role, ticker, company_name, side, transaction_code,
-    shares, price_per_share, value_usd, shares_owned_after, transaction_date, filed_date, source_url, ingested_at, near_offering)
- VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    shares, price_per_share, value_usd, shares_owned_after, transaction_date, filed_date, source_url, ingested_at, near_offering, is_plan_trade)
+ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
 function transactionArgs(entry: Transaction) {
   return [
@@ -32,6 +32,7 @@ function transactionArgs(entry: Transaction) {
     entry.sourceUrl,
     Date.now(),
     entry.nearOffering ? 1 : 0,
+    entry.isPlanTrade ? 1 : 0,
   ];
 }
 
@@ -67,10 +68,11 @@ export type TransactionRow = {
   filed_date: string;
   source_url: string;
   near_offering: number | null;
+  is_plan_trade: number | null;
 };
 
 const COLUMNS = `filer_id, filer_type, filer_name, filer_role, ticker, company_name, side, transaction_code,
-          shares, price_per_share, value_usd, shares_owned_after, transaction_date, filed_date, source_url, near_offering`;
+          shares, price_per_share, value_usd, shares_owned_after, transaction_date, filed_date, source_url, near_offering, is_plan_trade`;
 
 // Only genuine open-market trades ever feed the main consensus/signal-score computation — see
 // the note on TransactionCode in types/filing.ts. `getTransactionsSince`/`getTickerHistory`

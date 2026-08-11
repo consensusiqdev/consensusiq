@@ -70,6 +70,7 @@ export async function GET(request: NextRequest) {
       sourceUrl: r.source_url,
       accessionNumber: "",
       nearOffering: r.near_offering === 1,
+      isPlanTrade: r.is_plan_trade === 1,
     }));
 
     // The main consensus/signal-score computation only ever considers genuine open-market trades
@@ -77,9 +78,11 @@ export async function GET(request: NextRequest) {
     // trading decisions and would just dilute the signal (see TransactionCode in types/filing.ts).
     // Same reasoning excludes `nearOffering` trades: a "P" purchase made as part of a coordinated
     // IPO-directed share allocation (verified real case: BRVE, 6 insiders at the identical $18.00
-    // offer price on the same day) isn't an independent conviction decision either.
+    // offer price on the same day) isn't an independent conviction decision either. `isPlanTrade`
+    // trades are excluded for the same reason: a Rule 10b5-1(c) plan trade executes automatically
+    // on a pre-set schedule, not as a spontaneous decision.
     const openMarketOnly = allTransactions.filter(
-      (t) => (t.transactionCode === "P" || t.transactionCode === "S") && !t.nearOffering
+      (t) => (t.transactionCode === "P" || t.transactionCode === "S") && !t.nearOffering && !t.isPlanTrade
     );
     const currentOpenMarket = openMarketOnly.filter((t) => t.filedDate >= windowStart);
     const thisMonthOpenMarket = openMarketOnly.filter((t) => t.filedDate >= currentMonthStart);

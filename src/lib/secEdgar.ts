@@ -109,6 +109,12 @@ type IndexJson = { directory: { item: { name: string }[] } };
 type OwnershipXml = {
   ownershipDocument?: {
     periodOfReport?: string;
+    // SEC's own checkbox (mandatory since the 2023 insider-trading-arrangements rule) for whether
+    // ANY transaction on this filing was made pursuant to a Rule 10b5-1(c) trading plan — a
+    // document-level flag, not per-line, so it applies to every transaction on the same Form 4.
+    // Verified live against real EDGAR filings: encoded inconsistently as "0"/"1" in some, "true"/
+    // "false" in others — same encoding mess isFlagSet() already handles for isDirector etc.
+    aff10b5One?: string | number | boolean;
     issuer?: { issuerCik?: string; issuerName?: string; issuerTradingSymbol?: string };
     reportingOwner?: {
       reportingOwnerId?: { rptOwnerCik?: string | number; rptOwnerName?: string };
@@ -205,6 +211,7 @@ export async function fetchFilingOwnershipXml(accession: Form4Accession): Promis
 
   const filerRoleValue = filerRole(doc.reportingOwner?.reportingOwnerRelationship);
   const lines = doc.nonDerivativeTable?.nonDerivativeTransaction ?? [];
+  const isPlanTrade = isFlagSet(doc.aff10b5One);
 
   const transactions: Transaction[] = [];
   for (let i = 0; i < lines.length; i++) {
@@ -250,6 +257,7 @@ export async function fetchFilingOwnershipXml(accession: Form4Accession): Promis
       sourceUrl: `${SEC_BASE}/Archives/edgar/data/${accession.cik}/${accessionNoDashes}/${accession.accessionNumber}-index.htm`,
       accessionNumber: accession.accessionNumber,
       nearOffering,
+      isPlanTrade,
     });
   }
 

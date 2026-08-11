@@ -55,6 +55,7 @@ export async function getInsiderDetail(ticker: string, filerId: string): Promise
     sourceUrl: r.source_url,
     accessionNumber: "",
     nearOffering: r.near_offering === 1,
+    isPlanTrade: r.is_plan_trade === 1,
   }));
 
   const sharesHistory: SharesHistoryPoint[] = [];

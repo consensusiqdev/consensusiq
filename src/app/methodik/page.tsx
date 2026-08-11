@@ -93,7 +93,12 @@ export default async function MethodikPage() {
               Aktienvergütungen, Optionsausübungen und ähnliche Vorgänge sind keine freiwilligen
               Handelsentscheidungen und würden das Signal verwässern. Käufe innerhalb von 7 Tagen
               nach einem Börsengang/Angebot (424B4) werden ebenfalls ausgeschlossen — koordinierte
-              IPO-Zuteilungen sind keine unabhängige Konviktion.
+              IPO-Zuteilungen sind keine unabhängige Konviktion. Ebenso ausgeschlossen: Trades, bei
+              denen die Meldung selbst einen Rule-10b5-1(c)-Handelsplan angekreuzt hat — die
+              Ausführung erfolgt dann automatisch zu einem vorab festgelegten Zeitpunkt, nicht als
+              spontane Entscheidung. Alle drei Kategorien bleiben in der vollständigen
+              Handelshistorie sichtbar (entsprechend gekennzeichnet), fließen aber nicht in den
+              Score ein.
             </p>
           </section>
 

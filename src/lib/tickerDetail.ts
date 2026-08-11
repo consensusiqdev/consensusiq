@@ -50,6 +50,7 @@ function mapRowsToTransactions(ticker: string, rows: Awaited<ReturnType<typeof g
     sourceUrl: r.source_url,
     accessionNumber: "",
     nearOffering: r.near_offering === 1,
+    isPlanTrade: r.is_plan_trade === 1,
   }));
 }
 
@@ -75,7 +76,11 @@ export async function getTickerSummary(ticker: string): Promise<TickerSummary> {
     .toISOString()
     .slice(0, 10);
   const currentWindowTx = transactions.filter(
-    (t) => (t.transactionCode === "P" || t.transactionCode === "S") && !t.nearOffering && t.filedDate >= currentWindowStart
+    (t) =>
+      (t.transactionCode === "P" || t.transactionCode === "S") &&
+      !t.nearOffering &&
+      !t.isPlanTrade &&
+      t.filedDate >= currentWindowStart
   );
   const [currentSignal] = currentWindowTx.length > 0 ? summarizeTickers(buildTickerMap(currentWindowTx, MIN_USD)) : [];
 
@@ -111,7 +116,7 @@ export async function getTickerComparisonData(ticker: string): Promise<TickerCom
   const [rows, industries] = await Promise.all([getTickerHistory(ticker), getTickerIndustries()]);
   const allTransactions = mapRowsToTransactions(ticker, rows);
   const transactions = allTransactions.filter((t) => t.transactionCode === "P" || t.transactionCode === "S");
-  const openMarketOnly = transactions.filter((t) => !t.nearOffering);
+  const openMarketOnly = transactions.filter((t) => !t.nearOffering && !t.isPlanTrade);
 
   const companyName = transactions[0]?.companyName ?? allTransactions[0]?.companyName ?? ticker;
   const industry = industries.get(ticker) ?? null;
@@ -155,10 +160,10 @@ export async function getTickerDetail(ticker: string): Promise<TickerDetail> {
   // The visible trading-history list stays open-market-only, same reasoning as /api/signals —
   // grants/exercises aren't trading decisions and would misleadingly show up with a BUY badge.
   const transactions = allTransactions.filter((t) => t.transactionCode === "P" || t.transactionCode === "S");
-  // Additionally excludes nearOffering trades — same reasoning as /api/signals — but only for the
-  // score computations below; the visible history list above still shows them, flagged, per the
-  // `nearOffering` field's own doc comment ("still shown ... for transparency").
-  const openMarketOnly = transactions.filter((t) => !t.nearOffering);
+  // Additionally excludes nearOffering/isPlanTrade trades — same reasoning as /api/signals — but
+  // only for the score computations below; the visible history list above still shows them,
+  // flagged, per those fields' own doc comments ("still shown ... for transparency").
+  const openMarketOnly = transactions.filter((t) => !t.nearOffering && !t.isPlanTrade);
 
   const companyName = transactions[0]?.companyName ?? allTransactions[0]?.companyName ?? ticker;
   const buyCount = transactions.filter((t) => t.side === "BUY").length;

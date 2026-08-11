@@ -260,6 +260,14 @@ function TradeItem({ t, onSelectFiler }: { t: Transaction; onSelectFiler: (filer
             · IPO-Zeichnung
           </span>
         )}
+        {t.isPlanTrade && (
+          <span
+            className="text-text-faint"
+            title="Automatisch nach vorab festgelegtem Rule-10b5-1(c)-Handelsplan ausgeführt — keine spontane Entscheidung, zählt nicht in den Signal Score."
+          >
+            · 10b5-1-Plan
+          </span>
+        )}
         {t.side === "SELL" &&
           (t.priorAcquisition ? (
             <span className="text-text-faint">· {fmtAcquisitionLabel(t.priorAcquisition)}</span>
