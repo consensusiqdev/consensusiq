@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { isAuthorizedCronRequest } from "@/lib/cronAuth";
 import { runInstitutionalBackfillCycle } from "@/lib/cronJobs";
 
-export const maxDuration = 60;
+// 60s wasn't enough for a single large fund's OpenFIGI CUSIP resolution alone (~2.1s per
+// 100-CUSIP batch + 300ms throttle, e.g. ~26s for Bridgewater's ~1040 unique CUSIPs — a fund with
+// several thousand would blow well past 60s). This project has Fluid Compute active (confirmed in
+// the Vercel dashboard), which supports much longer durations than the classic 60s cap.
+export const maxDuration = 300;
 
 // Deliberately NOT in vercel.json's schedule — a one-time backfill, one fund per call (a large
 // fund's OpenFIGI CUSIP resolution alone can approach the time budget), not a recurring job.
