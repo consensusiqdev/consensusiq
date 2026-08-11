@@ -8,6 +8,7 @@ import {
   getLocalWatchlist,
   removeFromLocalWatchlist,
 } from "@/lib/localWatchlist";
+import WatchlistCard from "@/components/watchlist/WatchlistCard";
 
 export default function LocalWatchlistClient() {
   const [tickers, setTickers] = useState<string[]>([]);
@@ -78,22 +79,9 @@ export default function LocalWatchlistClient() {
             in diesem Browser gespeichert, kein Login nötig.
           </p>
         ) : (
-          <div className="flex flex-wrap gap-2">
+          <div className="space-y-2.5">
             {tickers.map((t) => (
-              <span
-                key={t}
-                className="flex items-center gap-2 rounded-full border border-border bg-bg-panel-2 py-1.5 pl-3.5 pr-2 font-mono text-[13px] text-text"
-              >
-                {t}
-                <button
-                  type="button"
-                  onClick={() => handleRemove(t)}
-                  aria-label={`${t} entfernen`}
-                  className="flex h-5 w-5 items-center justify-center rounded-full text-text-faint hover:bg-bg-hover hover:text-no"
-                >
-                  ✕
-                </button>
-              </span>
+              <WatchlistCard key={t} ticker={t} onRemove={handleRemove} />
             ))}
           </div>
         )}
