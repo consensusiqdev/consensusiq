@@ -156,7 +156,10 @@ export async function getDashboardInitialData(query: SignalsQueryParams): Promis
   const signals = filterAndSortConsensus(allSignals, query.minAgree, query.sortBy);
   const industries = await getTickerIndustries();
   for (const s of signals) s.industry = industries.get(s.ticker) ?? null;
-  const topBuys = topBuyTransactions(currentOpenMarket);
+  // `cSuiteOnly` DOES apply here, unlike `buysOnly` — see the matching comment in
+  // /api/signals/route.ts for why (not a buy/sell-direction question, it's "whose trades count
+  // at all"). Kept in sync with that route since this function is a deliberate duplicate of it.
+  const topBuys = topBuyTransactions(query.cSuiteOnly ? currentOpenMarket.filter((t) => t.isCSuite) : currentOpenMarket);
 
   const currentMonthValueUsd = filterAndSortConsensus(
     computeConsensus(thisMonthTransactions, query.minUsd),

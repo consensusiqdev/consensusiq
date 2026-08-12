@@ -111,8 +111,10 @@ export async function GET(request: NextRequest) {
     // Independent of `buysOnly` — always surfaces real purchases, even while the main list
     // is showing sell-side consensus (buys are rarer, so this shouldn't be hidden by a filter
     // meant for the ticker-consensus list). Uses openMarketOnly, not allTransactions — a stock
-    // grant isn't a "buy" worth highlighting here.
-    const topBuys = topBuyTransactions(currentOpenMarket);
+    // grant isn't a "buy" worth highlighting here. `cSuiteOnly` DOES still apply here, unlike
+    // `buysOnly` — it's not a buy/sell-direction question, it's "whose trades count at all",
+    // so a visitor who ticked "Nur C-Suite" shouldn't see non-C-suite names in this list either.
+    const topBuys = topBuyTransactions(cSuiteOnly ? currentOpenMarket.filter((t) => t.isCSuite) : currentOpenMarket);
 
     // Same pipeline (minUsd/minAgree/buysOnly-filtered) run on this and last calendar month —
     // powers the KPI row's "vs. letzten Monat" delta. Only the aggregate volume is needed here,
