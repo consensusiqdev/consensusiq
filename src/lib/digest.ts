@@ -42,7 +42,14 @@ export async function checkAndSendDigests(): Promise<{ emailsSent: number }> {
 
     try {
       const windowDays = pref.frequency === "weekly" ? 7 : 1;
-      const signals = await getFilteredSignals({ windowDays, minAgree: 3, minUsd: 1000, buysOnly: false, sortBy: "score" });
+      const signals = await getFilteredSignals({
+        windowDays,
+        minAgree: 3,
+        minUsd: 1000,
+        buysOnly: false,
+        cSuiteOnly: false,
+        sortBy: "score",
+      });
       const top = signals.slice(0, TOP_N);
 
       if (top.length > 0) {

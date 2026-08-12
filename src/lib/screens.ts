@@ -22,6 +22,7 @@ async function matchingSignalsForScreen(row: {
   min_agree: number;
   min_usd: number;
   buys_only: number;
+  c_suite_only: number;
   industry: string | null;
 }): Promise<TickerSignal[]> {
   const signals = await getFilteredSignals({
@@ -29,6 +30,7 @@ async function matchingSignalsForScreen(row: {
     minAgree: row.min_agree,
     minUsd: row.min_usd,
     buysOnly: row.buys_only === 1,
+    cSuiteOnly: row.c_suite_only === 1,
     sortBy: "score",
   });
   return row.industry ? signals.filter((s) => s.industry === row.industry) : signals;
@@ -43,6 +45,7 @@ export async function createScreen(clerkUserId: string, criteria: SavedScreenCri
     min_agree: criteria.minAgree,
     min_usd: criteria.minUsd,
     buys_only: criteria.buysOnly ? 1 : 0,
+    c_suite_only: criteria.cSuiteOnly ? 1 : 0,
     industry: criteria.industry,
   });
   await markTickersSeenForScreen(

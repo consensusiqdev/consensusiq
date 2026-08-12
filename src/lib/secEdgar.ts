@@ -123,6 +123,7 @@ type OwnershipXml = {
         isOfficer?: string | number | boolean;
         isTenPercentOwner?: string | number | boolean;
         isOther?: string | number | boolean;
+        officerTitle?: string;
       };
     };
     nonDerivativeTable?: {
@@ -171,6 +172,23 @@ function filerRole(rel?: {
   return undefined;
 }
 
+// SEC only gives a free-text officerTitle ("Chief Executive Officer", "EVP & CFO", "Chairman of
+// the Board", ...), not a structured seniority level — this keyword match is necessarily a
+// heuristic, not exhaustive. Deliberately scoped to the classic "top of the org chart" roles
+// (CEO/CFO/COO/President/Chairman), not every VP-level "Chief X Officer" title, since the whole
+// point is distinguishing genuinely top-level conviction from routine officer-level activity.
+// The negative lookbehinds on "president"/"chair(man)" are load-bearing, not decorative — without
+// them "(Executive|Senior|Vice) Vice President" and "Vice Chairman", both genuinely common and
+// genuinely NOT C-suite, would false-positive on the bare \bpresident\b / \bchairman\b match
+// (confirmed by testing: "Executive Vice President" and "Vice President, Sales" both matched
+// before this fix).
+const C_SUITE_TITLE_PATTERN =
+  /chief (executive|financial|operating) officer|\bceo\b|\bcfo\b|\bcoo\b|(?<!vice[\s-])\bpresident\b|(?<!vice[\s-])\bchair(man|woman|person)?\b/i;
+
+function isCSuiteTitle(officerTitle?: string): boolean {
+  return !!officerTitle && C_SUITE_TITLE_PATTERN.test(officerTitle);
+}
+
 // Codes we ingest at all — beyond genuine open-market trades (P/S), also the common
 // compensation-related events, so the "when/how did they get these shares" origin lookup
 // (src/lib/premium.ts) has something to find. IMPORTANT: only P/S ever feed the main
@@ -210,6 +228,7 @@ export async function fetchFilingOwnershipXml(accession: Form4Accession): Promis
   const filerId = String(rawFilerId).padStart(10, "0");
 
   const filerRoleValue = filerRole(doc.reportingOwner?.reportingOwnerRelationship);
+  const isCSuite = isCSuiteTitle(doc.reportingOwner?.reportingOwnerRelationship?.officerTitle);
   const lines = doc.nonDerivativeTable?.nonDerivativeTransaction ?? [];
   const isPlanTrade = isFlagSet(doc.aff10b5One);
 
@@ -258,6 +277,7 @@ export async function fetchFilingOwnershipXml(accession: Form4Accession): Promis
       accessionNumber: accession.accessionNumber,
       nearOffering,
       isPlanTrade,
+      isCSuite,
     });
   }
 

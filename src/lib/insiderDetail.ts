@@ -18,6 +18,10 @@ const CLUSTER_WINDOW_DAYS = 14;
 // Matches the dashboard's own default "Min. Übereinstimmung" — count of 3+ distinct filers
 // (including this one) trading the same side in the window counts as a real cluster.
 const MIN_CLUSTER_SIZE = 3;
+// A trade at least this many times the insider's own average (excluding itself) counts as
+// "unusually large for them" — deliberately their OWN baseline, not an absolute dollar threshold,
+// since a $50k trade is routine for some insiders and huge for others.
+const SIZE_MULTIPLE_THRESHOLD = 2;
 
 export type SharesHistoryPoint = {
   date: string; // transactionDate
@@ -28,14 +32,19 @@ export type SharesHistoryPoint = {
 
 /** A transaction plus how many distinct filers (including this insider) traded the SAME side
  * within ±CLUSTER_WINDOW_DAYS of it — was this insider acting alone, or alongside others? Only
- * meaningful for genuine open-market trades; non-open-market lines get clusterParticipants: 1. */
-export type InsiderTransaction = Transaction & { clusterParticipants: number };
+ * meaningful for genuine open-market trades; non-open-market lines get clusterParticipants: 1.
+ * `sizeMultiple` is this trade's dollar value divided by the average of this insider's OTHER
+ * open-market trades at this company (leave-one-out, so one outlier doesn't dilute its own
+ * baseline) — null when there's no valueUsd or no other trade to compare against. */
+export type InsiderTransaction = Transaction & { clusterParticipants: number; sizeMultiple: number | null };
 
 export type TrackRecord = {
   totalBuys: number;
   totalSells: number;
   buysInCluster: number;
   sellsInCluster: number;
+  largeBuys: number; // sizeMultiple >= SIZE_MULTIPLE_THRESHOLD
+  largeSells: number;
 };
 
 export type InsiderDetail = {
@@ -98,10 +107,32 @@ export async function getInsiderDetail(ticker: string, filerId: string): Promise
       accessionNumber: "",
       nearOffering: r.near_offering === 1,
       isPlanTrade: r.is_plan_trade === 1,
+      isCSuite: r.is_c_suite === 1,
     };
     const isOpenMarket = (base.transactionCode === "P" || base.transactionCode === "S") && !base.nearOffering && !base.isPlanTrade;
-    return { ...base, clusterParticipants: isOpenMarket ? clusterParticipantsFor(base.side, base.filedDate) : 1 };
+    return { ...base, clusterParticipants: isOpenMarket ? clusterParticipantsFor(base.side, base.filedDate) : 1, sizeMultiple: null };
   });
+
+  // Leave-one-out average: for each open-market trade, compare against the average of this
+  // insider's OTHER open-market trades at this company (not including itself) — computed once
+  // from the running total/count rather than per-trade, since (sum - x)/(count - 1) is equivalent
+  // and avoids an O(n²) pass.
+  const openMarketWithValue = transactionsAsc.filter(
+    (t) =>
+      (t.transactionCode === "P" || t.transactionCode === "S") &&
+      !t.nearOffering &&
+      !t.isPlanTrade &&
+      t.valueUsd != null
+  );
+  const totalValue = openMarketWithValue.reduce((sum, t) => sum + (t.valueUsd ?? 0), 0);
+  const valuedCount = openMarketWithValue.length;
+  for (const t of transactionsAsc) {
+    if (t.valueUsd == null || valuedCount < 2) continue;
+    const isOpenMarket = (t.transactionCode === "P" || t.transactionCode === "S") && !t.nearOffering && !t.isPlanTrade;
+    if (!isOpenMarket) continue;
+    const othersAvg = (totalValue - t.valueUsd) / (valuedCount - 1);
+    t.sizeMultiple = othersAvg > 0 ? t.valueUsd / othersAvg : null;
+  }
 
   const sharesHistory: SharesHistoryPoint[] = [];
   let prevShares: number | null = null;
@@ -127,6 +158,8 @@ export async function getInsiderDetail(ticker: string, filerId: string): Promise
     totalSells: ownOpenMarket.filter((t) => t.side === "SELL").length,
     buysInCluster: ownOpenMarket.filter((t) => t.side === "BUY" && t.clusterParticipants >= MIN_CLUSTER_SIZE).length,
     sellsInCluster: ownOpenMarket.filter((t) => t.side === "SELL" && t.clusterParticipants >= MIN_CLUSTER_SIZE).length,
+    largeBuys: ownOpenMarket.filter((t) => t.side === "BUY" && (t.sizeMultiple ?? 0) >= SIZE_MULTIPLE_THRESHOLD).length,
+    largeSells: ownOpenMarket.filter((t) => t.side === "SELL" && (t.sizeMultiple ?? 0) >= SIZE_MULTIPLE_THRESHOLD).length,
   };
 
   const last = transactionsAsc[transactionsAsc.length - 1];

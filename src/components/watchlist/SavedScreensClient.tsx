@@ -60,6 +60,7 @@ export default function SavedScreensClient() {
                   {s.window_days} Tage · min. {s.min_agree} Insider · min. $
                   {s.min_usd.toLocaleString("de-DE")}
                   {s.buys_only === 1 ? " · nur Käufe" : ""}
+                  {s.c_suite_only === 1 ? " · nur C-Suite" : ""}
                   {s.industry ? ` · ${s.industry}` : ""}
                 </div>
               </div>

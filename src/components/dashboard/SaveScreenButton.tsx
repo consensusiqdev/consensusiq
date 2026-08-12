@@ -27,6 +27,7 @@ export default function SaveScreenButton({ filters }: { filters: DashboardFilter
           minAgree: filters.minAgree,
           minUsd: filters.minUsd,
           buysOnly: filters.buysOnly,
+          cSuiteOnly: filters.cSuiteOnly,
           industry: filters.industry || null,
         }),
       });

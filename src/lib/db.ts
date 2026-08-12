@@ -9,8 +9,8 @@ const client = createClient({
 
 const insertTransactionSql = `INSERT OR IGNORE INTO transactions
    (source_id, filer_type, filer_id, filer_name, filer_role, ticker, company_name, side, transaction_code,
-    shares, price_per_share, value_usd, shares_owned_after, transaction_date, filed_date, source_url, ingested_at, near_offering, is_plan_trade)
- VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    shares, price_per_share, value_usd, shares_owned_after, transaction_date, filed_date, source_url, ingested_at, near_offering, is_plan_trade, is_c_suite)
+ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
 function transactionArgs(entry: Transaction) {
   return [
@@ -33,6 +33,7 @@ function transactionArgs(entry: Transaction) {
     Date.now(),
     entry.nearOffering ? 1 : 0,
     entry.isPlanTrade ? 1 : 0,
+    entry.isCSuite ? 1 : 0,
   ];
 }
 
@@ -69,10 +70,11 @@ export type TransactionRow = {
   source_url: string;
   near_offering: number | null;
   is_plan_trade: number | null;
+  is_c_suite: number | null;
 };
 
 const COLUMNS = `filer_id, filer_type, filer_name, filer_role, ticker, company_name, side, transaction_code,
-          shares, price_per_share, value_usd, shares_owned_after, transaction_date, filed_date, source_url, near_offering, is_plan_trade`;
+          shares, price_per_share, value_usd, shares_owned_after, transaction_date, filed_date, source_url, near_offering, is_plan_trade, is_c_suite`;
 
 // Only genuine open-market trades ever feed the main consensus/signal-score computation — see
 // the note on TransactionCode in types/filing.ts. `getTransactionsSince`/`getTickerHistory`
@@ -216,6 +218,7 @@ export type SavedScreenRow = {
   min_agree: number;
   min_usd: number;
   buys_only: number;
+  c_suite_only: number;
   industry: string | null;
   created_at: number;
 };
@@ -226,12 +229,13 @@ export type SavedScreenCriteria = {
   minAgree: number;
   minUsd: number;
   buysOnly: boolean;
+  cSuiteOnly: boolean;
   industry: string | null;
 };
 
 const createSavedScreenSql = `INSERT INTO saved_screens
-   (clerk_user_id, name, window_days, min_agree, min_usd, buys_only, industry, created_at)
- VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+   (clerk_user_id, name, window_days, min_agree, min_usd, buys_only, c_suite_only, industry, created_at)
+ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
 export async function createSavedScreen(clerkUserId: string, criteria: SavedScreenCriteria): Promise<number> {
   const result = await client.execute({
@@ -243,6 +247,7 @@ export async function createSavedScreen(clerkUserId: string, criteria: SavedScre
       criteria.minAgree,
       criteria.minUsd,
       criteria.buysOnly ? 1 : 0,
+      criteria.cSuiteOnly ? 1 : 0,
       criteria.industry,
       Date.now(),
     ],

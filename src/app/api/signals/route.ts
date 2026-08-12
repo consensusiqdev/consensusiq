@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
   const minAgree = Math.max(1, parseInt(params.get("minAgree") ?? "3", 10) || 3);
   const minUsd = Math.max(0, parseFloat(params.get("minUsd") ?? "1000") || 0);
   const buysOnly = params.get("buysOnly") !== "false";
+  const cSuiteOnly = params.get("cSuiteOnly") === "true";
 
   try {
     const now = new Date();
@@ -71,6 +72,7 @@ export async function GET(request: NextRequest) {
       accessionNumber: "",
       nearOffering: r.near_offering === 1,
       isPlanTrade: r.is_plan_trade === 1,
+      isCSuite: r.is_c_suite === 1,
     }));
 
     // The main consensus/signal-score computation only ever considers genuine open-market trades
@@ -90,13 +92,16 @@ export async function GET(request: NextRequest) {
       (t) => t.filedDate >= previousMonthStart && t.filedDate < currentMonthStart
     );
 
-    const transactions = buysOnly ? currentOpenMarket.filter((t) => t.side === "BUY") : currentOpenMarket;
-    const thisMonthTransactions = buysOnly
-      ? thisMonthOpenMarket.filter((t) => t.side === "BUY")
-      : thisMonthOpenMarket;
-    const lastMonthTransactions = buysOnly
-      ? lastMonthOpenMarket.filter((t) => t.side === "BUY")
-      : lastMonthOpenMarket;
+    // Applied after buysOnly, same "additional narrowing on request" treatment — a CEO/CFO/COO/
+    // President/Chairman buy is generally read as a stronger signal than a routine officer-level
+    // one, so this lets a visitor restrict the whole computation to just those, not just badge them.
+    const applyFilters = (txs: Transaction[]) => {
+      const sided = buysOnly ? txs.filter((t) => t.side === "BUY") : txs;
+      return cSuiteOnly ? sided.filter((t) => t.isCSuite) : sided;
+    };
+    const transactions = applyFilters(currentOpenMarket);
+    const thisMonthTransactions = applyFilters(thisMonthOpenMarket);
+    const lastMonthTransactions = applyFilters(lastMonthOpenMarket);
 
     const filers = summarizeFilers(transactions);
     const allSignals = computeConsensus(transactions, minUsd);

@@ -3,7 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import TopBar from "@/components/Layout/TopBar";
 import SectorSignalList from "@/components/sector/SectorSignalList";
-import { getSectorOverview, resolveIndustryFromSlug } from "@/lib/sectors";
+import Sparkline from "@/components/ui/Sparkline";
+import { getSectorOverview, getSectorSignalHistory, resolveIndustryFromSlug, summarizeIndustryTrend } from "@/lib/sectors";
 import { pageMetadata, SITE_URL } from "@/lib/seo";
 
 export const revalidate = 1800;
@@ -27,8 +28,9 @@ export default async function SectorPage({ params }: { params: Promise<{ slug: s
   const industry = await resolveIndustryFromSlug(slug);
   if (!industry) notFound();
 
-  const overview = await getSectorOverview(industry);
+  const [overview, trendHistory] = await Promise.all([getSectorOverview(industry), getSectorSignalHistory(industry)]);
   const signals = [...overview.signals].sort((a, b) => b.signalScore - a.signalScore);
+  const trend = summarizeIndustryTrend(trendHistory);
 
   const breadcrumbJsonLd = {
     "@context": "https://schema.org",
@@ -59,6 +61,40 @@ export default async function SectorPage({ params }: { params: Promise<{ slug: s
           {overview.tickerCount} bekannte Ticker in dieser Branche. Aktuelle Insider-Konsenssignale
           der letzten 30 Tage, sortiert nach Signal Score.
         </p>
+
+        <div className="mt-6 rounded-xl border border-border bg-bg-panel p-5">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-wide text-text-faint">
+                Insider-Stimmung, letzte 12 Wochen
+              </p>
+              <p className="mt-1 max-w-md text-sm leading-relaxed text-text-dim">
+                {trend.direction === "unknown" && "Noch nicht genug Aktivität für einen verlässlichen Trend."}
+                {trend.direction === "up" && (
+                  <>
+                    <span className="font-semibold text-yes">↑ Aufwärts</span> — Ø Signal Score{" "}
+                    {trend.recentAvg?.toFixed(0)} in den letzten 4 Wochen, gegenüber {trend.priorAvg?.toFixed(0)} in
+                    den 4 Wochen davor.
+                  </>
+                )}
+                {trend.direction === "down" && (
+                  <>
+                    <span className="font-semibold text-no">↓ Abwärts</span> — Ø Signal Score{" "}
+                    {trend.recentAvg?.toFixed(0)} in den letzten 4 Wochen, gegenüber {trend.priorAvg?.toFixed(0)} in
+                    den 4 Wochen davor.
+                  </>
+                )}
+                {trend.direction === "flat" && (
+                  <>
+                    Seitwärts — Ø Signal Score {trend.recentAvg?.toFixed(0)} in den letzten 4 Wochen, kaum verändert
+                    gegenüber {trend.priorAvg?.toFixed(0)} in den 4 Wochen davor.
+                  </>
+                )}
+              </p>
+            </div>
+            <Sparkline points={trendHistory} width={200} height={44} />
+          </div>
+        </div>
 
         <div className="mt-6">
           <SectorSignalList signals={signals} />

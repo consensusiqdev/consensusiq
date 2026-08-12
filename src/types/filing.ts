@@ -63,6 +63,11 @@ export type Transaction = {
   // trade was executed automatically on a pre-set schedule, not a spontaneous decision. Same
   // "exclude from signal score, still shown for transparency" treatment as `nearOffering`.
   isPlanTrade: boolean;
+  // Whether the reporting owner's free-text officerTitle matches a "top of the org chart" role
+  // (CEO/CFO/COO/President/Chairman) — see isCSuiteTitle() in secEdgar.ts for the heuristic.
+  // Unlike nearOffering/isPlanTrade, this is NOT always excluded — it powers an opt-in "Nur
+  // C-Suite" filter (see FilterBar.tsx) that narrows the signal computation on request.
+  isCSuite: boolean;
 };
 
 export type SideFiler = {

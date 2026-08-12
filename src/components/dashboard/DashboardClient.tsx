@@ -69,6 +69,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         filters.minAgree === DEFAULT_FILTERS.minAgree &&
         debouncedMinUsd === DEFAULT_FILTERS.minUsd &&
         filters.buysOnly === DEFAULT_FILTERS.buysOnly &&
+        filters.cSuiteOnly === DEFAULT_FILTERS.cSuiteOnly &&
         filters.sortBy === DEFAULT_FILTERS.sortBy;
       if (isStillDefaultFilters && refreshNonce === 0) return; // initialData already covers this
     }
@@ -85,6 +86,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       minAgree: String(filters.minAgree),
       minUsd: String(debouncedMinUsd),
       buysOnly: String(filters.buysOnly),
+      cSuiteOnly: String(filters.cSuiteOnly),
       sortBy: filters.sortBy,
     });
 
@@ -109,7 +111,16 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       });
 
     return () => controller.abort();
-  }, [filtersHydrated, filters.windowDays, filters.minAgree, debouncedMinUsd, filters.buysOnly, filters.sortBy, refreshNonce]);
+  }, [
+    filtersHydrated,
+    filters.windowDays,
+    filters.minAgree,
+    debouncedMinUsd,
+    filters.buysOnly,
+    filters.cSuiteOnly,
+    filters.sortBy,
+    refreshNonce,
+  ]);
 
   function handleChange(patch: Partial<DashboardFilters>) {
     setFilters((prev) => {

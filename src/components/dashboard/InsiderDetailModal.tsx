@@ -137,9 +137,11 @@ export default function InsiderDetailModal({
                 <p className="mt-1.5 font-mono text-[11.5px] leading-relaxed text-text-dim">
                   <b className="text-text">{detail.trackRecord.totalBuys}</b> Käufe, davon{" "}
                   <b className="text-text">{detail.trackRecord.buysInCluster}</b> als Teil eines
-                  Insider-Konsens (3+ gleichzeitig aktive Insider) ·{" "}
-                  <b className="text-text">{detail.trackRecord.totalSells}</b> Verkäufe, davon{" "}
-                  <b className="text-text">{detail.trackRecord.sellsInCluster}</b> im Konsens.
+                  Insider-Konsens (3+ gleichzeitig aktive Insider) und{" "}
+                  <b className="text-text">{detail.trackRecord.largeBuys}</b> deutlich größer als
+                  sein/ihr eigener Durchschnitt · <b className="text-text">{detail.trackRecord.totalSells}</b>{" "}
+                  Verkäufe, davon <b className="text-text">{detail.trackRecord.sellsInCluster}</b> im
+                  Konsens und <b className="text-text">{detail.trackRecord.largeSells}</b> ungewöhnlich groß.
                 </p>
               </div>
             )}
@@ -174,6 +176,11 @@ export default function InsiderDetailModal({
                       <span className="text-text-faint">· Code {t.transactionCode}</span>
                       {t.clusterParticipants > 1 && (
                         <span className="text-accent">· {t.clusterParticipants} Insider gleichzeitig aktiv</span>
+                      )}
+                      {/* 2x threshold mirrors SIZE_MULTIPLE_THRESHOLD in insiderDetail.ts — not
+                          importable here (server-only module), kept in sync manually. */}
+                      {t.sizeMultiple != null && t.sizeMultiple >= 2 && (
+                        <span className="text-accent">· {t.sizeMultiple.toFixed(1)}× größer als Durchschnitt</span>
                       )}
                       <span className="ml-auto text-text-faint">{fmtDate(t.transactionDate)}</span>
                     </a>

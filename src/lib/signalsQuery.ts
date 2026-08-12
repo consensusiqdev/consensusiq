@@ -12,6 +12,7 @@ export type SignalsQueryParams = {
   minAgree: number;
   minUsd: number;
   buysOnly: boolean;
+  cSuiteOnly: boolean;
   sortBy: SortOption;
 };
 
@@ -27,7 +28,8 @@ export function parseSignalsQueryParams(params: URLSearchParams): SignalsQueryPa
   const minAgree = Math.max(1, parseInt(params.get("minAgree") ?? "3", 10) || 3);
   const minUsd = Math.max(0, parseFloat(params.get("minUsd") ?? "1000") || 0);
   const buysOnly = params.get("buysOnly") === "true";
-  return { windowDays, minAgree, minUsd, buysOnly, sortBy };
+  const cSuiteOnly = params.get("cSuiteOnly") === "true";
+  return { windowDays, minAgree, minUsd, buysOnly, cSuiteOnly, sortBy };
 }
 
 /**
@@ -60,13 +62,15 @@ export async function getFilteredSignals(query: SignalsQueryParams): Promise<Tic
     accessionNumber: "",
     nearOffering: r.near_offering === 1,
     isPlanTrade: r.is_plan_trade === 1,
+    isCSuite: r.is_c_suite === 1,
   }));
 
   const openMarketOnly = allTransactions.filter(
     (t) => (t.transactionCode === "P" || t.transactionCode === "S") && !t.nearOffering && !t.isPlanTrade
   );
   const currentOpenMarket = openMarketOnly.filter((t) => t.filedDate >= windowStart);
-  const transactions = query.buysOnly ? currentOpenMarket.filter((t) => t.side === "BUY") : currentOpenMarket;
+  const sided = query.buysOnly ? currentOpenMarket.filter((t) => t.side === "BUY") : currentOpenMarket;
+  const transactions = query.cSuiteOnly ? sided.filter((t) => t.isCSuite) : sided;
 
   const allSignals = computeConsensus(transactions, query.minUsd);
   const signals = filterAndSortConsensus(allSignals, query.minAgree, query.sortBy);
@@ -127,6 +131,7 @@ export async function getDashboardInitialData(query: SignalsQueryParams): Promis
     accessionNumber: "",
     nearOffering: r.near_offering === 1,
     isPlanTrade: r.is_plan_trade === 1,
+    isCSuite: r.is_c_suite === 1,
   }));
 
   const openMarketOnly = allTransactions.filter(
@@ -138,13 +143,13 @@ export async function getDashboardInitialData(query: SignalsQueryParams): Promis
     (t) => t.filedDate >= previousMonthStart && t.filedDate < currentMonthStart
   );
 
-  const transactions = query.buysOnly ? currentOpenMarket.filter((t) => t.side === "BUY") : currentOpenMarket;
-  const thisMonthTransactions = query.buysOnly
-    ? thisMonthOpenMarket.filter((t) => t.side === "BUY")
-    : thisMonthOpenMarket;
-  const lastMonthTransactions = query.buysOnly
-    ? lastMonthOpenMarket.filter((t) => t.side === "BUY")
-    : lastMonthOpenMarket;
+  const applyFilters = (txs: Transaction[]) => {
+    const sided = query.buysOnly ? txs.filter((t) => t.side === "BUY") : txs;
+    return query.cSuiteOnly ? sided.filter((t) => t.isCSuite) : sided;
+  };
+  const transactions = applyFilters(currentOpenMarket);
+  const thisMonthTransactions = applyFilters(thisMonthOpenMarket);
+  const lastMonthTransactions = applyFilters(lastMonthOpenMarket);
 
   const filers = summarizeFilers(transactions);
   const allSignals = computeConsensus(transactions, query.minUsd);

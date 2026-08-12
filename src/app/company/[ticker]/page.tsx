@@ -115,6 +115,12 @@ export default async function CompanyPage({ params }: { params: Promise<{ ticker
               ) : (
                 <p className="mt-1 text-sm text-text-faint">Kein aktives Signal in den letzten 30 Tagen.</p>
               )}
+              {detail.scorePercentile != null && detail.activeSignalCount > 0 && (
+                <p className="mt-1 font-mono text-[11px] text-accent">
+                  Stärker als {detail.scorePercentile}% der {detail.activeSignalCount} aktuell aktiven
+                  Signale (30 Tage, min. $1.000).
+                </p>
+              )}
               <p className="mt-2 font-mono text-[11px] text-text-faint">
                 {detail.stats.distinctFilers} bekannte Insider · {fmtUsd(
                   detail.transactions.reduce((sum, t) => sum + (t.valueUsd ?? 0), 0)

@@ -5,6 +5,7 @@ import { enrichTransactionsWithAcquisitionHistory } from "@/lib/premium";
 import { fetchCompanyEvents } from "@/lib/secEdgar";
 import { buildTickerMap, computeSignalHistory, summarizeTickers, type SignalHistoryPoint } from "@/lib/consensus";
 import { getSectorOverview } from "@/lib/sectors";
+import { getFilteredSignals } from "@/lib/signalsQuery";
 import { getActiveSubscriberId } from "@/lib/subscription";
 import type { CompanyEvent, InstitutionalEvent, Transaction, TickerSignal, TransactionSide } from "@/types/filing";
 
@@ -28,6 +29,12 @@ export type TickerDetail = {
   leadCount: number;
   signalHistory: SignalHistoryPoint[];
   peers: TickerSignal[];
+  // Where this ticker's current score ranks among every OTHER ticker with an active signal right
+  // now, same window/$-threshold basis as signalScore itself (0-100, "stronger than N% of..."),
+  // and how many other tickers that comparison is against. null/0 when there's no active signal
+  // to rank, or nothing else currently active to compare against.
+  scorePercentile: number | null;
+  activeSignalCount: number;
 };
 
 function mapRowsToTransactions(ticker: string, rows: Awaited<ReturnType<typeof getTickerHistory>>): Transaction[] {
@@ -51,6 +58,7 @@ function mapRowsToTransactions(ticker: string, rows: Awaited<ReturnType<typeof g
     accessionNumber: "",
     nearOffering: r.near_offering === 1,
     isPlanTrade: r.is_plan_trade === 1,
+    isCSuite: r.is_c_suite === 1,
   }));
 }
 
@@ -198,6 +206,32 @@ export async function getTickerDetail(ticker: string): Promise<TickerDetail> {
   const currentWindowTx = openMarketOnly.filter((t) => t.filedDate >= currentWindowStart);
   const [currentSignal] = currentWindowTx.length > 0 ? summarizeTickers(buildTickerMap(currentWindowTx, MIN_USD)) : [];
 
+  // Percentile among every OTHER ticker currently scored under the exact same basis (minAgree: 1
+  // mirrors that this ticker's own score above also has no minAgree floor) — apples to apples,
+  // not compared against the dashboard's filter-dependent list.
+  let scorePercentile: number | null = null;
+  let activeSignalCount = 0;
+  if (currentSignal) {
+    try {
+      const allActive = await getFilteredSignals({
+        windowDays: CURRENT_WINDOW_DAYS,
+        minAgree: 1,
+        minUsd: MIN_USD,
+        buysOnly: false,
+        cSuiteOnly: false,
+        sortBy: "score",
+      });
+      const others = allActive.filter((s) => s.ticker !== ticker);
+      activeSignalCount = others.length;
+      if (others.length > 0) {
+        const below = others.filter((s) => s.signalScore <= currentSignal.signalScore).length;
+        scorePercentile = Math.round((below / others.length) * 100);
+      }
+    } catch (err) {
+      console.warn(`[tickerDetail] Percentile für ${ticker} konnte nicht berechnet werden:`, err);
+    }
+  }
+
   const signalHistory = computeSignalHistory(openMarketOnly, 12, MIN_USD);
 
   let peers: TickerSignal[] = [];
@@ -222,5 +256,7 @@ export async function getTickerDetail(ticker: string): Promise<TickerDetail> {
     leadCount: currentSignal?.leadCount ?? 0,
     signalHistory,
     peers,
+    scorePercentile,
+    activeSignalCount,
   };
 }

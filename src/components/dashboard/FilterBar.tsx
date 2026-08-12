@@ -6,6 +6,10 @@ export type DashboardFilters = {
   minAgree: number;
   minUsd: number;
   buysOnly: boolean;
+  // Restricts the whole signal computation to trades by reporting owners whose free-text
+  // officerTitle matches CEO/CFO/COO/President/Chairman (see isCSuiteTitle() in secEdgar.ts) —
+  // a heuristic keyword match, not a structured SEC field.
+  cSuiteOnly: boolean;
   sortBy: SortOption;
   // "" = alle Branchen. Rein clientseitig angewendet (siehe DashboardClient) — löst bewusst
   // keinen Refetch aus, da die Branche pro Ticker schon Teil der geladenen Signals ist.
@@ -20,6 +24,7 @@ export const DEFAULT_FILTERS: DashboardFilters = {
   // defaulting to buys-only would leave a near-empty dashboard until enough buy data
   // accumulates. Off by default; the checkbox is still there for anyone who wants it.
   buysOnly: false,
+  cSuiteOnly: false,
   sortBy: "score",
   industry: "",
 };
@@ -134,6 +139,19 @@ export default function FilterBar({
         Nur Käufe
       </label>
 
+      <label
+        className="flex items-center gap-1.5 pb-2 text-[12.5px] text-text-dim"
+        title="Nur Trades von CEO/CFO/COO/President/Chairman"
+      >
+        <input
+          type="checkbox"
+          checked={filters.cSuiteOnly}
+          onChange={(e) => onChange({ cSuiteOnly: e.target.checked })}
+          className="h-[15px] w-[15px] accent-accent"
+        />
+        Nur C-Suite
+      </label>
+
       <div className="flex-1" />
 
       <span className="pb-2 font-mono text-[11px] text-text-faint">{updatedLabel}</span>
@@ -162,6 +180,7 @@ function ExportLinks({ filters }: { filters: DashboardFilters }) {
     minAgree: String(filters.minAgree),
     minUsd: String(filters.minUsd),
     buysOnly: String(filters.buysOnly),
+    cSuiteOnly: String(filters.cSuiteOnly),
     sortBy: filters.sortBy,
   }).toString();
 

@@ -228,6 +228,28 @@ export function computeSignalHistory(
   return points;
 }
 
+// Sentinel ticker used only within computeIndustrySignalHistory() to merge every real ticker in
+// an industry into one aggregate bucket — never persisted or shown, just an implementation detail
+// of reusing buildTickerMap's per-ticker grouping for a cross-ticker aggregate instead.
+const INDUSTRY_AGGREGATE_TICKER = "__industry_aggregate__";
+
+/**
+ * Same weekly-bucketed trend as computeSignalHistory(), but aggregated across an entire industry
+ * instead of one ticker — is insider sentiment in this industry rising or falling? Relabels every
+ * transaction's `ticker` field so buildTickerMap groups the whole industry's activity into a
+ * single per-week signal instead of one signal per real ticker (which computeSignalHistory would
+ * otherwise arbitrarily pick just one of via its `[signal] = ...` destructure). `transactions`
+ * must already be pre-filtered by the caller the same way as computeSignalHistory expects.
+ */
+export function computeIndustrySignalHistory(
+  transactions: Transaction[],
+  weeks = 12,
+  minUsd = 1000
+): SignalHistoryPoint[] {
+  const relabeled = transactions.map((t) => ({ ...t, ticker: INDUSTRY_AGGREGATE_TICKER }));
+  return computeSignalHistory(relabeled, weeks, minUsd);
+}
+
 export type SortOption = "consensus" | "exposure" | "conviction" | "score";
 
 export function filterAndSortConsensus(

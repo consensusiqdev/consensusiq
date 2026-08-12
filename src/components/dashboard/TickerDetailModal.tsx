@@ -31,6 +31,8 @@ type Detail = {
   signalScore: number | null;
   leadSide: TransactionSide | null;
   signalHistory: SignalHistoryPoint[];
+  scorePercentile: number | null;
+  activeSignalCount: number;
 };
 
 type TimelineItem =
@@ -169,6 +171,11 @@ export default function TickerDetailModal({
                   </div>
                   <CrossSignalBadge events={detail.institutionalEvents} />
                 </div>
+                {detail.scorePercentile != null && detail.activeSignalCount > 0 && (
+                  <div className="mt-0.5 font-mono text-[10px] text-accent">
+                    Stärker als {detail.scorePercentile}% von {detail.activeSignalCount} aktiven Signalen
+                  </div>
+                )}
               </div>
               <Sparkline points={detail.signalHistory} width={140} height={36} />
             </div>
@@ -247,6 +254,7 @@ function TradeItem({ t, onSelectFiler }: { t: Transaction; onSelectFiler: (filer
           {t.filerName}
         </button>
         {t.filerRole && <span className="text-text-faint">({t.filerRole})</span>}
+        {t.isCSuite && <Badge variant="accent">C-SUITE</Badge>}
         <span className="text-text-dim">
           {fmtShares(t.shares)} Aktien
           {pct != null && <span className="text-accent"> ({fmtPct(pct)})</span>}

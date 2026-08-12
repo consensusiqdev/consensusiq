@@ -57,6 +57,7 @@ export async function checkAndPostTwitterSignals(): Promise<void> {
       accessionNumber: "",
       nearOffering: false, // already filtered out above
       isPlanTrade: false, // already filtered out above
+      isCSuite: r.is_c_suite === 1,
     }));
 
   const signals = computeConsensus(openMarketOnly, 1000);

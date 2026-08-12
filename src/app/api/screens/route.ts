@@ -23,13 +23,14 @@ export async function POST(request: NextRequest) {
   const minAgree = Math.max(1, parseInt(body?.minAgree, 10) || 3);
   const minUsd = Math.max(0, parseFloat(body?.minUsd) || 0);
   const buysOnly = body?.buysOnly === true;
+  const cSuiteOnly = body?.cSuiteOnly === true;
   const industry = typeof body?.industry === "string" && body.industry.trim() ? body.industry.trim() : null;
 
   if (!name) {
     return NextResponse.json({ error: "name fehlt" }, { status: 400 });
   }
 
-  await createScreen(userId, { name, windowDays, minAgree, minUsd, buysOnly, industry });
+  await createScreen(userId, { name, windowDays, minAgree, minUsd, buysOnly, cSuiteOnly, industry });
   return NextResponse.json({ screens: await getSavedScreensForUser(userId) });
 }
 
