@@ -153,8 +153,10 @@ export type InstitutionalMove = {
 /**
  * Cross-fund "smart money consensus" for one ticker, rolled up over however many of the last 4
  * calendar quarters we have on record (2-4 — grows as more history gets backfilled). Mirrors
- * consensus.ts's TickerSignal structurally (same 3-component-average × side-multiplier shape) but
- * built from 13F position changes across the 20 tracked funds instead of Form-4 insider trades.
+ * consensus.ts's TickerSignal structurally (same N-component-average × side-multiplier shape,
+ * currently 3 components here vs. 4 on the insider score — 13F data has no per-fund transaction
+ * timestamp to derive a cluster-tightness component from) but built from 13F position changes
+ * across the 20 tracked funds instead of Form-4 insider trades.
  * Deliberately kept separate from TickerSignal/insider data for now — see project notes.
  */
 export type InstitutionalConsensusSignal = {
@@ -204,6 +206,7 @@ export type TickerSignal = {
   convictionRatio: number;
   dollarWeightedRatio: number;
   avgHoldingsPct: number;
+  clusterTightnessRatio: number; // 1 = leading side traded on the ~same day, 0 = maximally spread out
   sideMultiplier: number;
   totalValueAll: number;
   observedTopN: number;

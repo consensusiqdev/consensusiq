@@ -16,20 +16,21 @@ function scoreTierClass(score: number): string {
   return "border-border text-text-faint";
 }
 
-/** Breaks the 0-100 signalScore back down into its three equally-weighted thirds plus the
+/** Breaks the 0-100 signalScore back down into its four equally-weighted quarters plus the
  *  buy/sell multiplier — mirrors the exact math in consensus.ts's summarizeTickers(). */
 function scoreBreakdown(signal: TickerSignal) {
-  const third = 100 / 3;
-  const headcountPts = signal.convictionRatio * third;
-  const dollarPts = signal.dollarWeightedRatio * third;
-  const holdingsPts = signal.avgHoldingsPct * third;
-  const rawScore = headcountPts + dollarPts + holdingsPts;
+  const quarter = 100 / 4;
+  const headcountPts = signal.convictionRatio * quarter;
+  const dollarPts = signal.dollarWeightedRatio * quarter;
+  const holdingsPts = signal.avgHoldingsPct * quarter;
+  const tightnessPts = signal.clusterTightnessRatio * quarter;
+  const rawScore = headcountPts + dollarPts + holdingsPts + tightnessPts;
   const afterMultiplier = rawScore * signal.sideMultiplier;
-  return { headcountPts, dollarPts, holdingsPts, rawScore, afterMultiplier };
+  return { headcountPts, dollarPts, holdingsPts, tightnessPts, rawScore, afterMultiplier };
 }
 
 function ScoreTooltip({ signal }: { signal: TickerSignal }) {
-  const { headcountPts, dollarPts, holdingsPts, rawScore, afterMultiplier } = scoreBreakdown(signal);
+  const { headcountPts, dollarPts, holdingsPts, tightnessPts, rawScore, afterMultiplier } = scoreBreakdown(signal);
   const multiplierLabel =
     signal.leadSide === "BUY"
       ? `× ${signal.sideMultiplier.toFixed(2)} (kaufgeführter Konsens)`
@@ -57,6 +58,10 @@ function ScoreTooltip({ signal }: { signal: TickerSignal }) {
       <div className="flex justify-between">
         <span>Ø Altbestand gehandelt</span>
         <span className="text-text">+{holdingsPts.toFixed(1)}</span>
+      </div>
+      <div className="flex justify-between">
+        <span>Cluster-Enge</span>
+        <span className="text-text">+{tightnessPts.toFixed(1)}</span>
       </div>
 
       <div className="mt-1.5 flex justify-between border-t border-dashed border-border pt-1.5">

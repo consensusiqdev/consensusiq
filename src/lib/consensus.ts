@@ -17,6 +17,13 @@ export function pctOfPriorHoldings(
   return Math.min(1, shares / prior); // clamp — >100% only possible from a data inconsistency
 }
 
+// Reference span for the cluster-tightness component below — deliberately a fixed constant, not
+// the caller's selected windowDays, so tightness reads the same regardless of which
+// Beobachtungszeitraum a visitor has chosen (a genuinely tight 3-day cluster shouldn't score
+// differently just because someone widened the window to 90 days to see more tickers at once).
+// 14 days matches the dashboard's own default windowDays as a reasonable "same-ish news cycle" scale.
+const CLUSTER_TIGHTNESS_REFERENCE_DAYS = 14;
+
 type MutableTickerSide = {
   side: TransactionSide;
   filersById: Map<string, TickerSide["filers"][number]>;
@@ -111,11 +118,31 @@ export function summarizeTickers(tickers: Map<string, MutableTicker>): TickerSig
     const avgHoldingsPct =
       holdingsPcts.length > 0 ? holdingsPcts.reduce((sum, p) => sum + p, 0) / holdingsPcts.length : 0;
 
+    // How tightly clustered in time the leading side's trades are — 3 insiders buying within the
+    // same 2 days reads as a much stronger, more coordinated-feeling signal than the same 3 insiders
+    // spread across 90 days, which the headcount/dollar/holdings-% components alone can't
+    // distinguish (they're time-blind). A single-filer "cluster" has nothing to spread, so it's
+    // treated as maximally tight (1) rather than penalized for having no second data point.
+    const leadTransactionTimes = leading.filers.map((f) => new Date(f.transactionDate).getTime());
+    const clusterTightnessRatio =
+      leadTransactionTimes.length > 1
+        ? Math.max(
+            0,
+            Math.min(
+              1,
+              1 -
+                (Math.max(...leadTransactionTimes) - Math.min(...leadTransactionTimes)) /
+                  (CLUSTER_TIGHTNESS_REFERENCE_DAYS * 24 * 60 * 60 * 1000)
+            )
+          )
+        : 1;
+
     // Insider BUYING is historically a much stronger, more voluntary signal than SELLING (which
     // is routinely driven by diversification, taxes, or RSU vesting rather than conviction) — so
     // a BUY-led consensus is boosted and a SELL-led one is discounted, on top of the same
-    // headcount/dollar/holdings-% blend used for both.
-    const rawScore = 100 * ((convictionRatio + dollarWeightedRatio + avgHoldingsPct) / 3);
+    // headcount/dollar/holdings-%/tightness blend used for both.
+    const rawScore =
+      100 * ((convictionRatio + dollarWeightedRatio + avgHoldingsPct + clusterTightnessRatio) / 4);
     const sideMultiplier = leading.side === "BUY" ? 1.15 : 0.85;
     const signalScore = Math.round(Math.min(100, Math.max(0, rawScore * sideMultiplier)));
 
@@ -136,6 +163,7 @@ export function summarizeTickers(tickers: Map<string, MutableTicker>): TickerSig
       convictionRatio,
       dollarWeightedRatio,
       avgHoldingsPct,
+      clusterTightnessRatio,
       sideMultiplier,
       totalValueAll,
       observedTopN: uniqueFilers.size,

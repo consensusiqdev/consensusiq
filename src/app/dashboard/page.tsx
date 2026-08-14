@@ -39,8 +39,9 @@ export default async function DashboardPage() {
             ]. Der „Signal Score&quot; (0–100) je
             Ticker kombiniert zu gleichen Teilen (1) den Anteil der Insider auf der jeweils
             führenden Seite (Kauf/Verkauf) an allen im Zeitraum aktiven Insidern, (2) deren Anteil
-            am gesamten gehandelten Dollar-Volumen und (3) den durchschnittlichen Anteil des
-            jeweils zuvor gehaltenen Aktienbestands, der gehandelt wurde; Kauf-geführter Konsens
+            am gesamten gehandelten Dollar-Volumen, (3) den durchschnittlichen Anteil des
+            jeweils zuvor gehaltenen Aktienbestands, der gehandelt wurde, und (4) wie zeitlich eng
+            beieinander diese Insider gehandelt haben; Kauf-geführter Konsens
             wird zusätzlich mit ×1,15 gewichtet, Verkauf-geführter mit ×0,85. Diese Einordnung
             wurde nicht in Übereinstimmung mit den Rechtsvorschriften zur Förderung der
             Unabhängigkeit von Finanzanalysen erstellt und unterliegt keinem Verbot des Handels

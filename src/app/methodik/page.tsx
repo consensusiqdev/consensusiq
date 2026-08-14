@@ -63,7 +63,7 @@ export default async function MethodikPage() {
             <p className="mt-2">
               Jeder Ticker mit mindestens der eingestellten Mindestanzahl unabhängig handelnder
               Insider bekommt einen Signal Score von 0–100. Er setzt sich zu gleichen Teilen aus
-              drei Faktoren zusammen:
+              vier Faktoren zusammen:
             </p>
             <ol className="mt-3 space-y-2.5 border-l border-border pl-4">
               <li>
@@ -81,6 +81,14 @@ export default async function MethodikPage() {
                 führenden Seite tatsächlich gehandelt haben (via <code>sharesOwnedAfter</code>) —
                 ein kleiner Trade eines Großaktionärs zählt hier anders als der komplette Ausstieg
                 eines kleineren Insiders.
+              </li>
+              <li>
+                <b className="text-text">Cluster-Enge</b> — wie zeitlich nah beieinander die
+                Insider der führenden Seite gehandelt haben (Referenzfenster: 14 Tage). Mehrere
+                Insider, die praktisch am selben Tag kaufen oder verkaufen, wirken koordinierter
+                als dieselbe Anzahl über Monate verteilt — ein einzelner Insider auf der führenden
+                Seite gilt automatisch als maximal eng (nichts, womit er sich zeitlich streuen
+                könnte).
               </li>
             </ol>
             <p className="mt-3">
