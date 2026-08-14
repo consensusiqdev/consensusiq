@@ -8,13 +8,26 @@ import { checkAndPostTwitterSignals } from "@/lib/twitterBot";
 import { ingestNewForm3Positions, backfillNextTicker } from "@/lib/insiderPositions";
 
 /**
- * The 5-min cycle: Form 4 ingest → watchlist alert emails for anything new → saved-screen alert
- * emails for anything newly matching → digest emails for anyone due → Twitter bot check →
- * real-time Form 3 (new insider) feed. Shared between local dev's setInterval loop
+ * The 5-min cycle: real-time Form 3 (new insider) feed → Form 4 ingest → watchlist alert emails
+ * for anything new → saved-screen alert emails for anything newly matching → digest emails for
+ * anyone due → Twitter bot check. Shared between local dev's setInterval loop
  * (instrumentation.ts) and the production /api/cron/ingest route — same logic either way, only
  * the trigger differs.
+ *
+ * Form 3 deliberately runs FIRST, not last: a brand-new insider who files both a Form 3 and a same-
+ * day Form 4 BUY needs their Form 3 already in insider_positions by the time ingestTransactions()
+ * runs its "frisch eingestiegen" check (computeFreshInsiderFlags() in ingest.ts) — otherwise that
+ * exact "just joined and already buying" case, the one this flag exists for, would be missed on
+ * the one cycle it matters most.
  */
 export async function runIngestCycle(): Promise<void> {
+  try {
+    const form3Result = await ingestNewForm3Positions();
+    console.log(`[insiderPositions] ${form3Result.processed} neue Form-3-Positionen verarbeitet`);
+  } catch (err) {
+    console.error("[insiderPositions] Form-3-Feed fehlgeschlagen:", err);
+  }
+
   try {
     const result = await ingestTransactions();
     console.log(
@@ -56,13 +69,6 @@ export async function runIngestCycle(): Promise<void> {
     await checkAndPostTwitterSignals();
   } catch (err) {
     console.error("[twitter] fehlgeschlagen:", err);
-  }
-
-  try {
-    const result = await ingestNewForm3Positions();
-    console.log(`[insiderPositions] ${result.processed} neue Form-3-Positionen verarbeitet`);
-  } catch (err) {
-    console.error("[insiderPositions] Form-3-Feed fehlgeschlagen:", err);
   }
 }
 

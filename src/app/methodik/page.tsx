@@ -108,6 +108,13 @@ export default async function MethodikPage() {
               Handelshistorie sichtbar (entsprechend gekennzeichnet), fließen aber nicht in den
               Score ein.
             </p>
+            <p className="mt-3">
+              Zusätzlich rein informativ markiert (ebenfalls ohne Einfluss auf den Score, da nicht
+              eindeutig ist, ob es ein stärkeres oder schwächeres Signal ist): Käufe von Insidern,
+              die laut SEC-Form-3 erst innerhalb der letzten 30 Tage neu bei der Firma
+              aufgetaucht sind (&bdquo;Frisch eingestiegen&ldquo;). Kein rückwirkendes Backfill —
+              nur ab Einführung dieser Markierung neu erfasste Trades können sie tragen.
+            </p>
           </section>
 
           <section>

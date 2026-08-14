@@ -73,6 +73,7 @@ export async function GET(request: NextRequest) {
       nearOffering: r.near_offering === 1,
       isPlanTrade: r.is_plan_trade === 1,
       isCSuite: r.is_c_suite === 1,
+      isFreshInsider: r.is_fresh_insider === 1,
     }));
 
     // The main consensus/signal-score computation only ever considers genuine open-market trades

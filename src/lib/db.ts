@@ -9,8 +9,8 @@ const client = createClient({
 
 const insertTransactionSql = `INSERT OR IGNORE INTO transactions
    (source_id, filer_type, filer_id, filer_name, filer_role, ticker, company_name, side, transaction_code,
-    shares, price_per_share, value_usd, shares_owned_after, transaction_date, filed_date, source_url, ingested_at, near_offering, is_plan_trade, is_c_suite)
- VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    shares, price_per_share, value_usd, shares_owned_after, transaction_date, filed_date, source_url, ingested_at, near_offering, is_plan_trade, is_c_suite, is_fresh_insider)
+ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
 function transactionArgs(entry: Transaction) {
   return [
@@ -34,6 +34,7 @@ function transactionArgs(entry: Transaction) {
     entry.nearOffering ? 1 : 0,
     entry.isPlanTrade ? 1 : 0,
     entry.isCSuite ? 1 : 0,
+    entry.isFreshInsider ? 1 : 0,
   ];
 }
 
@@ -71,10 +72,11 @@ export type TransactionRow = {
   near_offering: number | null;
   is_plan_trade: number | null;
   is_c_suite: number | null;
+  is_fresh_insider: number | null;
 };
 
 const COLUMNS = `filer_id, filer_type, filer_name, filer_role, ticker, company_name, side, transaction_code,
-          shares, price_per_share, value_usd, shares_owned_after, transaction_date, filed_date, source_url, near_offering, is_plan_trade, is_c_suite`;
+          shares, price_per_share, value_usd, shares_owned_after, transaction_date, filed_date, source_url, near_offering, is_plan_trade, is_c_suite, is_fresh_insider`;
 
 // Only genuine open-market trades ever feed the main consensus/signal-score computation — see
 // the note on TransactionCode in types/filing.ts. `getTransactionsSince`/`getTickerHistory`
@@ -552,8 +554,14 @@ export async function recordTweet(ticker: string, leadCount: number): Promise<vo
   await client.execute({ sql: recordTweetSql, args: [ticker, leadCount, Date.now()] });
 }
 
-const upsertInsiderPositionSql = `INSERT INTO insider_positions (ticker, filer_id, filer_name, filer_role, shares, as_of_date, source_type, source_url, updated_at)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+// first_seen_date/first_seen_source_type are deliberately absent from the DO UPDATE SET clause
+// below — they're written once on the row's first-ever INSERT (via the VALUES list) and then left
+// untouched by every later update, so they keep recording the insider's original first-seen
+// snapshot (typically their Form 3) even as as_of_date/source_type keep advancing to whatever
+// their latest known position is. Powers the "frisch eingestiegen und kauft schon" flag on
+// transactions — see computeFreshInsiderFlags() in ingest.ts.
+const upsertInsiderPositionSql = `INSERT INTO insider_positions (ticker, filer_id, filer_name, filer_role, shares, as_of_date, source_type, source_url, updated_at, first_seen_date, first_seen_source_type)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
    ON CONFLICT(ticker, filer_id) DO UPDATE SET
      filer_name = excluded.filer_name,
      filer_role = excluded.filer_role,
@@ -587,8 +595,46 @@ export async function upsertInsiderPosition(entry: {
       entry.sourceType,
       entry.sourceUrl,
       Date.now(),
+      entry.asOfDate,
+      entry.sourceType,
     ],
   });
+}
+
+export type FirstSeenInfo = { firstSeenDate: string; firstSeenSourceType: string };
+
+/**
+ * Batched lookup of insider_positions.first_seen_date/first_seen_source_type for a set of
+ * (ticker, filerId) pairs — used at Form 4 ingest time to decide whether a BUY's filer counts as
+ * "freshly appeared via Form 3" (see computeFreshInsiderFlags() in ingest.ts). Returns a map keyed
+ * by `${ticker}:${filerId}`; pairs with no insider_positions row yet (or NULL first_seen_date, e.g.
+ * rows written before this column existed) are simply absent from the map.
+ */
+export async function getFirstSeenInfo(
+  pairs: { ticker: string; filerId: string }[]
+): Promise<Map<string, FirstSeenInfo>> {
+  const map = new Map<string, FirstSeenInfo>();
+  if (pairs.length === 0) return map;
+
+  const placeholders = pairs.map(() => "(?, ?)").join(", ");
+  const sql = `SELECT ticker, filer_id, first_seen_date, first_seen_source_type
+     FROM insider_positions WHERE (ticker, filer_id) IN (VALUES ${placeholders})
+     AND first_seen_date IS NOT NULL`;
+  const args = pairs.flatMap((p) => [p.ticker, p.filerId]);
+
+  const result = await client.execute({ sql, args });
+  for (const row of result.rows as unknown as {
+    ticker: string;
+    filer_id: string;
+    first_seen_date: string;
+    first_seen_source_type: string;
+  }[]) {
+    map.set(`${row.ticker}:${row.filer_id}`, {
+      firstSeenDate: row.first_seen_date,
+      firstSeenSourceType: row.first_seen_source_type,
+    });
+  }
+  return map;
 }
 
 export type InsiderPositionRow = {

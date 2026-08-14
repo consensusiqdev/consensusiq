@@ -59,6 +59,7 @@ function mapRowsToTransactions(ticker: string, rows: Awaited<ReturnType<typeof g
     nearOffering: r.near_offering === 1,
     isPlanTrade: r.is_plan_trade === 1,
     isCSuite: r.is_c_suite === 1,
+    isFreshInsider: r.is_fresh_insider === 1,
   }));
 }
 

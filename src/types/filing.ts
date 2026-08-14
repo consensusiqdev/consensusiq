@@ -68,6 +68,16 @@ export type Transaction = {
   // Unlike nearOffering/isPlanTrade, this is NOT always excluded — it powers an opt-in "Nur
   // C-Suite" filter (see FilterBar.tsx) that narrows the signal computation on request.
   isCSuite: boolean;
+  // True for a genuine open-market BUY (transactionCode "P" — not an "A" grant/award, which is
+  // routine day-one compensation, not a conviction purchase) whose filer's first-ever appearance
+  // in insider_positions was a Form 3 (new reporting-person registration, not a Form 4/5) within
+  // FRESH_INSIDER_WINDOW_DAYS before this trade — see computeFreshInsiderFlags() in ingest.ts.
+  // Purely informational (like nearOffering's
+  // badge), NOT excluded from the signal score — whether a brand-new insider buying immediately
+  // reads as stronger or weaker conviction is genuinely ambiguous, unlike the other two flags.
+  // No historical backfill: only transactions ingested after this feature shipped can be flagged,
+  // since first_seen_date wasn't tracked before then (same limitation as isPlanTrade/isCSuite).
+  isFreshInsider: boolean;
 };
 
 export type SideFiler = {

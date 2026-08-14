@@ -108,6 +108,7 @@ export async function getInsiderDetail(ticker: string, filerId: string): Promise
       nearOffering: r.near_offering === 1,
       isPlanTrade: r.is_plan_trade === 1,
       isCSuite: r.is_c_suite === 1,
+      isFreshInsider: r.is_fresh_insider === 1,
     };
     const isOpenMarket = (base.transactionCode === "P" || base.transactionCode === "S") && !base.nearOffering && !base.isPlanTrade;
     return { ...base, clusterParticipants: isOpenMarket ? clusterParticipantsFor(base.side, base.filedDate) : 1, sizeMultiple: null };

@@ -278,6 +278,9 @@ export async function fetchFilingOwnershipXml(accession: Form4Accession): Promis
       nearOffering,
       isPlanTrade,
       isCSuite,
+      // Requires a DB lookup (insider_positions.first_seen_date) this pure-parsing function has no
+      // access to — computeFreshInsiderFlags() in ingest.ts fills in the real value afterward.
+      isFreshInsider: false,
     });
   }
 

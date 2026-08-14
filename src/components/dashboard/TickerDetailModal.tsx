@@ -276,6 +276,14 @@ function TradeItem({ t, onSelectFiler }: { t: Transaction; onSelectFiler: (filer
             · 10b5-1-Plan
           </span>
         )}
+        {t.isFreshInsider && (
+          <span
+            className="text-text-faint"
+            title="Dieser Insider ist erst kürzlich (Form 3) bei der Firma aufgetaucht und kauft schon — rein informativ, fließt nicht in den Signal Score ein."
+          >
+            · Frisch eingestiegen
+          </span>
+        )}
         {t.side === "SELL" &&
           (t.priorAcquisition ? (
             <span className="text-text-faint">· {fmtAcquisitionLabel(t.priorAcquisition)}</span>
