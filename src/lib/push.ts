@@ -2,14 +2,24 @@ import "server-only";
 import webpush from "web-push";
 import { getPushSubscriptionsForUsers, removePushSubscription, type PushSubscriptionRow } from "@/lib/db";
 
-// mailto:/https: subject is required by the Web Push protocol so a push service can contact the
-// sender if something's wrong (e.g. sending too aggressively) — using the site URL rather than a
-// mailto since there's no dedicated inbox for this yet (see the Impressum/age-gate notes).
-webpush.setVapidDetails(
-  "https://insider-align.com",
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-);
+// Lazy, not called at module scope: Next.js's build-time "Collecting page data" step evaluates
+// route modules (to inspect their config/runtime), which runs top-level code even though the
+// route itself never executes — a module-scope webpush.setVapidDetails() call crashed the ENTIRE
+// build the moment the VAPID env vars were missing/misconfigured, taking down every route that
+// transitively imports this file (e.g. /api/screens), not just push sending. Deliberately
+// re-invoked on every send rather than cached behind a boolean: setVapidDetails() itself is cheap
+// (no network call, just validates+stores the keys), and re-running it avoids a stale/empty cache
+// if this ever runs somewhere env vars can change between calls (e.g. a long-lived dev process).
+function ensureVapidConfigured(): void {
+  webpush.setVapidDetails(
+    // mailto:/https: subject is required by the Web Push protocol so a push service can contact
+    // the sender if something's wrong (e.g. sending too aggressively) — using the site URL rather
+    // than a mailto since there's no dedicated inbox for this yet (see the Impressum/age-gate notes).
+    "https://insider-align.com",
+    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+    process.env.VAPID_PRIVATE_KEY!
+  );
+}
 
 export type PushPayload = {
   title: string;
@@ -51,6 +61,11 @@ export async function sendPushToUsers(
   if (clerkUserIds.length === 0) return { sent: 0 };
 
   const subsByUser = await getPushSubscriptionsForUsers(clerkUserIds);
+  // Skip VAPID setup entirely (and the possible throw if the keys are missing/malformed) when
+  // nobody in this batch has a subscription anyway — same "don't do the work if there's nothing
+  // to send" short-circuit the rest of this function already has via the length checks below.
+  if ([...subsByUser.values()].every((subs) => subs.length === 0)) return { sent: 0 };
+  ensureVapidConfigured();
   const jobs: Promise<void>[] = [];
   let sent = 0;
 
