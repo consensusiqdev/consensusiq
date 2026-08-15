@@ -2,7 +2,20 @@ import "server-only";
 import { clerkClient } from "@clerk/nextjs/server";
 import { getSubscriptionStatus, getWatchersForTicker } from "@/lib/db";
 import { sendWatchlistAlertEmail } from "@/lib/email";
+import { sendPushToUsers } from "@/lib/push";
 import type { Transaction } from "@/types/filing";
+
+function pushPayloadFor(transactions: Transaction[]) {
+  const tickers = [...new Set(transactions.map((t) => t.ticker))];
+  return {
+    title: "InsiderAlign",
+    body:
+      tickers.length === 1
+        ? `Neue Insider-Meldung bei ${tickers[0]}`
+        : `Neue Insider-Meldungen: ${tickers.slice(0, 4).join(", ")}${tickers.length > 4 ? "…" : ""}`,
+    url: tickers.length === 1 ? `/company/${tickers[0]}` : "/dashboard",
+  };
+}
 
 /**
  * For each newly-ingested transaction, finds subscribers watching that ticker and emails them
@@ -10,8 +23,10 @@ import type { Transaction } from "@/types/filing";
  * subscribers are notified — a lapsed subscriber's old watchlist rows stay in the DB but stop
  * triggering emails, so the alert feature stays tied to the paid subscription over time.
  */
-export async function sendWatchlistAlerts(newTransactions: Transaction[]): Promise<{ emailsSent: number }> {
-  if (newTransactions.length === 0) return { emailsSent: 0 };
+export async function sendWatchlistAlerts(
+  newTransactions: Transaction[]
+): Promise<{ emailsSent: number; pushSent: number }> {
+  if (newTransactions.length === 0) return { emailsSent: 0, pushSent: 0 };
 
   // Fetch watchers per distinct ticker, then check subscription status per distinct user once —
   // avoids re-checking the same user's status per ticker they watch (a real network round trip
@@ -40,7 +55,7 @@ export async function sendWatchlistAlerts(newTransactions: Transaction[]): Promi
     }
   }
 
-  if (byUser.size === 0) return { emailsSent: 0 };
+  if (byUser.size === 0) return { emailsSent: 0, pushSent: 0 };
 
   const client = await clerkClient();
   let emailsSent = 0;
@@ -57,5 +72,16 @@ export async function sendWatchlistAlerts(newTransactions: Transaction[]): Promi
     }
   }
 
-  return { emailsSent };
+  // Push is an additional channel, not a replacement — every user in byUser gets checked for
+  // subscriptions regardless of whether their email above succeeded, own try/catch so a push
+  // failure never blocks or duplicates the email path.
+  let pushSent = 0;
+  try {
+    const result = await sendPushToUsers([...byUser.keys()], (clerkUserId) => pushPayloadFor(byUser.get(clerkUserId)!));
+    pushSent = result.sent;
+  } catch (err) {
+    console.error("[alerts] Push-Versand fehlgeschlagen:", err);
+  }
+
+  return { emailsSent, pushSent };
 }

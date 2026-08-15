@@ -4,6 +4,7 @@ import WatchlistClient from "@/components/watchlist/WatchlistClient";
 import LocalWatchlistClient from "@/components/watchlist/LocalWatchlistClient";
 import SavedScreensClient from "@/components/watchlist/SavedScreensClient";
 import DigestPreferenceClient from "@/components/watchlist/DigestPreferenceClient";
+import PushSubscribeButton from "@/components/watchlist/PushSubscribeButton";
 import { getActiveSubscriberId } from "@/lib/subscription";
 import { pageMetadata } from "@/lib/seo";
 
@@ -33,6 +34,16 @@ export default async function WatchlistPage() {
             </p>
             <div className="mt-6 rounded-xl border border-border bg-bg-panel p-5">
               <WatchlistClient />
+            </div>
+
+            <h3 className="mt-8 text-xl font-bold text-text">Push-Benachrichtigungen</h3>
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-text-dim">
+              Sofortige Benachrichtigungen direkt in diesem Browser oder — als installierte App —
+              auf deinem Gerät, sobald ein Watchlist-Ticker oder ein gespeicherter Screen einen
+              neuen Treffer meldet.
+            </p>
+            <div className="mt-6 rounded-xl border border-border bg-bg-panel p-5">
+              <PushSubscribeButton />
             </div>
 
             <h3 className="mt-8 text-xl font-bold text-text">Gespeicherte Screens</h3>

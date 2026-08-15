@@ -35,15 +35,17 @@ export async function runIngestCycle(): Promise<void> {
     );
 
     if (result.newTransactions.length > 0) {
-      const { emailsSent } = await sendWatchlistAlerts(result.newTransactions);
+      const { emailsSent, pushSent } = await sendWatchlistAlerts(result.newTransactions);
       if (emailsSent > 0) console.log(`[alerts] ${emailsSent} E-Mails verschickt`);
+      if (pushSent > 0) console.log(`[alerts] ${pushSent} Push-Benachrichtigungen verschickt`);
 
       // A saved screen's matching set can only change when new transactions land, same gating
       // as the watchlist check above — skip the (relatively expensive, one signals-pipeline-run
       // per screen) check entirely on a quiet cycle.
       try {
-        const { emailsSent: screenEmailsSent } = await checkSavedScreensAndAlert();
+        const { emailsSent: screenEmailsSent, pushSent: screenPushSent } = await checkSavedScreensAndAlert();
         if (screenEmailsSent > 0) console.log(`[screens] ${screenEmailsSent} Screen-Alert-E-Mails verschickt`);
+        if (screenPushSent > 0) console.log(`[screens] ${screenPushSent} Screen-Alert-Push-Benachrichtigungen verschickt`);
       } catch (err) {
         console.error("[screens] fehlgeschlagen:", err);
       }

@@ -346,6 +346,61 @@ export async function markDigestSent(clerkUserId: string, sentAt: number): Promi
   });
 }
 
+export type PushSubscriptionRow = {
+  endpoint: string;
+  clerk_user_id: string;
+  p256dh: string;
+  auth: string;
+};
+
+/** One browser/device's PushSubscription — a user can have several (one per device/browser they
+ * enabled push on). Re-subscribing the same endpoint (e.g. permission re-granted) just refreshes
+ * the keys rather than erroring. */
+export async function addPushSubscription(
+  clerkUserId: string,
+  endpoint: string,
+  p256dh: string,
+  auth: string
+): Promise<void> {
+  await client.execute({
+    sql: `INSERT INTO push_subscriptions (endpoint, clerk_user_id, p256dh, auth, created_at) VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(endpoint) DO UPDATE SET clerk_user_id = excluded.clerk_user_id, p256dh = excluded.p256dh, auth = excluded.auth`,
+    args: [endpoint, clerkUserId, p256dh, auth, Date.now()],
+  });
+}
+
+export async function removePushSubscription(endpoint: string): Promise<void> {
+  await client.execute({ sql: `DELETE FROM push_subscriptions WHERE endpoint = ?`, args: [endpoint] });
+}
+
+export async function getPushSubscriptionsForUser(clerkUserId: string): Promise<PushSubscriptionRow[]> {
+  const result = await client.execute({
+    sql: `SELECT * FROM push_subscriptions WHERE clerk_user_id = ?`,
+    args: [clerkUserId],
+  });
+  return result.rows as unknown as PushSubscriptionRow[];
+}
+
+/** Batched lookup for the alert crons (watchlist/screens) — one round trip for every distinct user
+ * who might have push subscriptions, same "check once per distinct user" pattern already used for
+ * getSubscriptionStatus() in alerts.ts/screens.ts. */
+export async function getPushSubscriptionsForUsers(clerkUserIds: string[]): Promise<Map<string, PushSubscriptionRow[]>> {
+  const map = new Map<string, PushSubscriptionRow[]>();
+  if (clerkUserIds.length === 0) return map;
+
+  const placeholders = clerkUserIds.map(() => "?").join(", ");
+  const result = await client.execute({
+    sql: `SELECT * FROM push_subscriptions WHERE clerk_user_id IN (${placeholders})`,
+    args: clerkUserIds,
+  });
+  for (const row of result.rows as unknown as PushSubscriptionRow[]) {
+    const list = map.get(row.clerk_user_id) ?? [];
+    list.push(row);
+    map.set(row.clerk_user_id, list);
+  }
+  return map;
+}
+
 const upsertTickerMetadataSql = `INSERT INTO ticker_metadata (ticker, sic_code, industry, updated_at)
    VALUES (?, ?, ?, ?)
    ON CONFLICT(ticker) DO UPDATE SET sic_code = excluded.sic_code, industry = excluded.industry, updated_at = excluded.updated_at`;
