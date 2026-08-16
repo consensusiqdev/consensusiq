@@ -7,6 +7,8 @@ import {
 import {
   getBackfillProgress,
   getNextBackfillTicker,
+  getProcessedAccessions,
+  markAccessionsProcessed,
   markBackfillDone,
   updateBackfillProgress,
   upsertInsiderPosition,
@@ -28,32 +30,47 @@ function sourceTypeForForm(form: string): "FORM3" | "FORM4" | "FORM5" {
  * Real-time-forward coverage: polls the same global "getcurrent" Form 3 feed pattern already used
  * for Form 4, so newly-appointed insiders show up in `insider_positions` within one 5-min cycle.
  * Doesn't touch older history — that's `backfillNextTicker`'s job.
+ *
+ * Same processed_accessions skip as ingest.ts's Form 4 path: this feed returns the same rolling
+ * ~100-most-recent window on every poll, so without filtering out already-handled accessions this
+ * re-fetched+re-parsed nearly all of them again every 5 minutes for no reason.
  */
-export async function ingestNewForm3Positions(): Promise<{ processed: number }> {
-  const accessions = await fetchRecentForm3Accessions(100);
+export async function ingestNewForm3Positions(): Promise<{ processed: number; newAccessions: number }> {
+  const allAccessions = await fetchRecentForm3Accessions(100);
+  const alreadyProcessed = await getProcessedAccessions(allAccessions.map((a) => a.accessionNumber));
+  const accessions = allAccessions.filter((a) => !alreadyProcessed.has(a.accessionNumber));
+
   let processed = 0;
+  const succeeded: string[] = [];
 
   for (const accession of accessions) {
     try {
       const position = await fetchOwnershipPosition(accession.cik, accession.accessionNumber);
-      if (!position) continue;
-      await upsertInsiderPosition({
-        ticker: position.ticker,
-        filerId: position.filerId,
-        filerName: position.filerName,
-        filerRole: position.filerRole,
-        shares: position.shares,
-        asOfDate: position.asOfDate,
-        sourceType: "FORM3",
-        sourceUrl: position.sourceUrl,
-      });
-      processed++;
+      if (position) {
+        await upsertInsiderPosition({
+          ticker: position.ticker,
+          filerId: position.filerId,
+          filerName: position.filerName,
+          filerRole: position.filerRole,
+          shares: position.shares,
+          asOfDate: position.asOfDate,
+          sourceType: "FORM3",
+          sourceUrl: position.sourceUrl,
+        });
+        processed++;
+      }
+      // A filing that legitimately yields no position (e.g. couldn't resolve a ticker) is still a
+      // successful fetch+parse, not a failure — mark it processed either way so it isn't retried
+      // forever. Only the catch block below (a genuine fetch/parse error) skips marking.
+      succeeded.push(accession.accessionNumber);
     } catch (err) {
       console.warn(`[insiderPositions] Form 3 ${accession.accessionNumber} fehlgeschlagen:`, err);
     }
   }
 
-  return { processed };
+  await markAccessionsProcessed(succeeded);
+
+  return { processed, newAccessions: accessions.length };
 }
 
 /**

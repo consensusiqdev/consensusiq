@@ -666,9 +666,29 @@ export function fetchPreviousQuarter13F(fundCik: string): Promise<Form13F | null
   return fetch13FAtOccurrence(fundCik, 1);
 }
 
-export async function fetchForm4Transactions(count = 100, concurrency = 5): Promise<Transaction[]> {
-  const accessions = await fetchRecentForm4Accessions(count);
+export type AccessionFetchResult = {
+  transactions: Transaction[];
+  // Accessions that were successfully fetched+parsed (even if they yielded zero tracked
+  // transactions — a filing with only non-tracked codes is a valid, successful result, not a
+  // failure). Callers should only persist these as "processed" (see processed_accessions in
+  // db.ts) AFTER their transactions are actually written — a fetch/parse success here doesn't by
+  // itself guarantee the DB write later succeeds too.
+  succeededAccessionNumbers: string[];
+};
+
+/**
+ * Fetches+parses a GIVEN list of accessions (not "however many are currently recent" — the caller
+ * decides which ones are actually worth fetching, typically by filtering fetchRecentForm4Accessions'
+ * output down to ones not already in processed_accessions, since SEC's "getcurrent" feed returns
+ * the same rolling set of recent filings on every poll regardless of how many are genuinely new
+ * since the last one).
+ */
+export async function fetchTransactionsForAccessions(
+  accessions: Form4Accession[],
+  concurrency = 5
+): Promise<AccessionFetchResult> {
   const results: Transaction[][] = new Array(accessions.length);
+  const succeeded: boolean[] = new Array(accessions.length).fill(false);
   let idx = 0;
 
   async function worker() {
@@ -677,6 +697,7 @@ export async function fetchForm4Transactions(count = 100, concurrency = 5): Prom
       const accession = accessions[cur];
       try {
         results[cur] = await fetchFilingOwnershipXml(accession);
+        succeeded[cur] = true;
       } catch (err) {
         console.warn(`[secEdgar] Filing ${accession.accessionNumber} konnte nicht geladen werden:`, err);
         results[cur] = [];
@@ -686,5 +707,9 @@ export async function fetchForm4Transactions(count = 100, concurrency = 5): Prom
 
   const workers = Array.from({ length: Math.min(concurrency, accessions.length) }, () => worker());
   await Promise.all(workers);
-  return results.flat();
+
+  return {
+    transactions: results.flat(),
+    succeededAccessionNumbers: accessions.filter((_, i) => succeeded[i]).map((a) => a.accessionNumber),
+  };
 }

@@ -401,6 +401,38 @@ export async function getPushSubscriptionsForUsers(clerkUserIds: string[]): Prom
   return map;
 }
 
+/**
+ * Which of the given accession numbers have already been successfully fetched+parsed+persisted —
+ * checked BEFORE the expensive SEC fetch+XML-parse, not just deduped afterward at insert time (see
+ * the doc comment on the processed_accessions table). Deliberately a plain array-in-query rather
+ * than the `(a, b) IN (VALUES ...)` tuple form used elsewhere (getFirstSeenInfo) since this is a
+ * single-column key.
+ */
+export async function getProcessedAccessions(accessionNumbers: string[]): Promise<Set<string>> {
+  if (accessionNumbers.length === 0) return new Set();
+  const placeholders = accessionNumbers.map(() => "?").join(", ");
+  const result = await client.execute({
+    sql: `SELECT accession_number FROM processed_accessions WHERE accession_number IN (${placeholders})`,
+    args: accessionNumbers,
+  });
+  return new Set((result.rows as unknown as { accession_number: string }[]).map((r) => r.accession_number));
+}
+
+/** Only call this AFTER the accessions' transactions/positions are actually persisted — marking one
+ * "processed" before that would permanently skip it on a later cycle even if this cycle's write
+ * failed. See callers in ingest.ts/insiderPositions.ts for the exact ordering. */
+export async function markAccessionsProcessed(accessionNumbers: string[]): Promise<void> {
+  if (accessionNumbers.length === 0) return;
+  const now = Date.now();
+  await client.batch(
+    accessionNumbers.map((accessionNumber) => ({
+      sql: `INSERT OR IGNORE INTO processed_accessions (accession_number, processed_at) VALUES (?, ?)`,
+      args: [accessionNumber, now],
+    })),
+    "write"
+  );
+}
+
 const upsertTickerMetadataSql = `INSERT INTO ticker_metadata (ticker, sic_code, industry, updated_at)
    VALUES (?, ?, ?, ?)
    ON CONFLICT(ticker) DO UPDATE SET sic_code = excluded.sic_code, industry = excluded.industry, updated_at = excluded.updated_at`;

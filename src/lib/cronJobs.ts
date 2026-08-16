@@ -23,7 +23,9 @@ import { ingestNewForm3Positions, backfillNextTicker } from "@/lib/insiderPositi
 export async function runIngestCycle(): Promise<void> {
   try {
     const form3Result = await ingestNewForm3Positions();
-    console.log(`[insiderPositions] ${form3Result.processed} neue Form-3-Positionen verarbeitet`);
+    console.log(
+      `[insiderPositions] ${form3Result.newAccessions} neu abgerufen, ${form3Result.processed} Form-3-Positionen verarbeitet`
+    );
   } catch (err) {
     console.error("[insiderPositions] Form-3-Feed fehlgeschlagen:", err);
   }
@@ -31,7 +33,7 @@ export async function runIngestCycle(): Promise<void> {
   try {
     const result = await ingestTransactions();
     console.log(
-      `[ingest] ${new Date().toISOString()} — ${result.fetched} Filings geladen, ${result.written} neue Transaktionen`
+      `[ingest] ${new Date().toISOString()} — ${result.fetched} Filings gesehen (${result.newAccessions} davon neu abgerufen), ${result.written} neue Transaktionen`
     );
 
     if (result.newTransactions.length > 0) {

@@ -25,7 +25,7 @@ const UPSERT_CONCURRENCY = 10; // Turso rejected an unbounded Promise.all for a 
 // ("Database connections limit exceeded, try to reduce concurrency") — real incident, took down
 // an unrelated prod build (the "/institutional" static page also queries the DB, so it failed to
 // prerender while a huge batch of concurrent upserts was in flight). Same worker-pool pattern as
-// secEdgar.ts's fetchForm4Transactions(), just bounding DB writes instead of HTTP fetches.
+// secEdgar.ts's fetchTransactionsForAccessions(), just bounding DB writes instead of HTTP fetches.
 
 /** Resolves one 13F filing's CUSIPs to tickers and upserts every holding line — shared by the
  * regular latest-quarter ingest and the one-time previous-quarter backfill below. */

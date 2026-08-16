@@ -1,10 +1,12 @@
 import "server-only";
 import { fetchCongressTransactions } from "@/lib/congressTrading";
-import { fetchForm4Transactions, fetchTickerSic } from "@/lib/secEdgar";
+import { fetchRecentForm4Accessions, fetchTransactionsForAccessions, fetchTickerSic } from "@/lib/secEdgar";
 import {
   getAllTickers,
   getFirstSeenInfo,
+  getProcessedAccessions,
   insertTransactionsBatch,
+  markAccessionsProcessed,
   tickerMetadataMissing,
   upsertInsiderPosition,
   upsertTickerMetadata,
@@ -68,16 +70,30 @@ async function backfillTickerMetadata(): Promise<void> {
 
 export async function ingestTransactions(): Promise<{
   fetched: number;
+  newAccessions: number;
   written: number;
   newTransactions: Transaction[];
 }> {
   // count=200 per poll covers the most recent Form 4 filings only — a burst of more filings
   // than that between two 5-minute polls could be missed (no pagination/cursor). Same class
   // of gap-tolerance the old Polymarket top-25 leaderboard already had, not a regression.
-  const [secTx, congressTx] = await Promise.all([
-    fetchForm4Transactions(FORM4_FETCH_COUNT).catch((err) => {
+  const allAccessions = await fetchRecentForm4Accessions(FORM4_FETCH_COUNT).catch((err) => {
+    console.error("[ingest] SEC EDGAR fehlgeschlagen:", err);
+    return [];
+  });
+
+  // The feed above returns the same rolling ~200-most-recent-filings window on every single poll —
+  // in a quiet 5-minute stretch the overlap with the previous poll can be 90%+. Skipping the ones
+  // already fetched+parsed+persisted in a prior cycle is the actual point of this refactor (was
+  // previously re-fetching and re-parsing every single one of the 200, every 5 minutes, real CPU
+  // cost, not just wasted network — see processed_accessions in db.ts).
+  const alreadyProcessed = await getProcessedAccessions(allAccessions.map((a) => a.accessionNumber));
+  const newAccessions = allAccessions.filter((a) => !alreadyProcessed.has(a.accessionNumber));
+
+  const [{ transactions: secTx, succeededAccessionNumbers }, congressTx] = await Promise.all([
+    fetchTransactionsForAccessions(newAccessions).catch((err) => {
       console.error("[ingest] SEC EDGAR fehlgeschlagen:", err);
-      return [];
+      return { transactions: [] as Transaction[], succeededAccessionNumbers: [] as string[] };
     }),
     fetchCongressTransactions().catch(() => []),
   ]);
@@ -114,7 +130,18 @@ export async function ingestTransactions(): Promise<{
       )
   );
 
+  // Only reached if everything above succeeded — if any of it threw, this line (and therefore the
+  // mark-as-processed write) never runs, so a failed cycle naturally leaves those accessions
+  // eligible for a retry next time instead of silently losing them. See the doc comment on
+  // markAccessionsProcessed() in db.ts.
+  await markAccessionsProcessed(succeededAccessionNumbers);
+
   await backfillTickerMetadata();
 
-  return { fetched: secTx.length + congressTx.length, written: newTransactions.length, newTransactions };
+  return {
+    fetched: allAccessions.length + congressTx.length,
+    newAccessions: newAccessions.length,
+    written: newTransactions.length,
+    newTransactions,
+  };
 }
