@@ -144,7 +144,12 @@ export function summarizeTickers(tickers: Map<string, MutableTicker>): TickerSig
     const rawScore =
       100 * ((convictionRatio + dollarWeightedRatio + avgHoldingsPct + clusterTightnessRatio) / 4);
     const sideMultiplier = leading.side === "BUY" ? 1.15 : 0.85;
-    const signalScore = Math.round(Math.min(100, Math.max(0, rawScore * sideMultiplier)));
+    const magnitude = Math.round(Math.min(100, Math.max(0, rawScore * sideMultiplier)));
+    // Signed so the number alone conveys direction — a sell-led consensus is a NEGATIVE score
+    // (down to -100), a buy-led one positive (up to +100). Before this, both directions rendered
+    // as the same 0-100 positive number and only the (easy to miss) leadSide label distinguished
+    // a strong sell from a strong buy.
+    const signalScore = leading.side === "SELL" ? -magnitude : magnitude;
 
     // "Since" the consensus started forming: earliest filing among the leading side's filers.
     const consensusSince = leading.filers.reduce<string | null>(
@@ -293,7 +298,10 @@ export function filterAndSortConsensus(
   } else if (sortBy === "conviction") {
     sorted.sort((a, b) => b.convictionRatio - a.convictionRatio);
   } else if (sortBy === "score") {
-    sorted.sort((a, b) => b.signalScore - a.signalScore);
+    // By strength (magnitude), not raw signed value — a -95 (extreme sell-off) is a stronger
+    // signal than a +40 (mild buy), even though 40 > -95 numerically. Otherwise every buy-led
+    // ticker would always rank above every sell-led one regardless of actual conviction.
+    sorted.sort((a, b) => Math.abs(b.signalScore) - Math.abs(a.signalScore));
   } else {
     sorted.sort(
       (a, b) =>

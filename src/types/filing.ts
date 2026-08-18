@@ -179,7 +179,7 @@ export type InstitutionalConsensusSignal = {
   dollarWeightedRatio: number; // leading side's |Δ$| / total |Δ$| moved by all active funds
   avgConvictionRatio: number; // avg, across the leading side's funds, of end-weight/(end+start-weight) — how much of their own portfolio they shifted, not just headline dollars
   sideMultiplier: number; // 1.15 accumulation-led, 0.85 distribution-led — same asymmetry as the insider score
-  consensusScore: number; // 0-100
+  consensusScore: number; // -100..100, negative = distribution-led, positive = accumulation-led
   netValueChangeUsd: number; // signed, summed across all active funds
   quartersUsed: number; // how many of the last 4 global quarters actually had data for this ticker
 };
@@ -220,6 +220,6 @@ export type TickerSignal = {
   sideMultiplier: number;
   totalValueAll: number;
   observedTopN: number;
-  signalScore: number;
+  signalScore: number; // -100..100, negative = sell-led, positive = buy-led
   consensusSince: string | null;
 };

@@ -62,8 +62,10 @@ export default async function MethodikPage() {
             <h3 className="text-[15px] font-semibold text-text">Der Signal Score</h3>
             <p className="mt-2">
               Jeder Ticker mit mindestens der eingestellten Mindestanzahl unabhängig handelnder
-              Insider bekommt einen Signal Score von 0–100. Er setzt sich zu gleichen Teilen aus
-              vier Faktoren zusammen:
+              Insider bekommt einen Signal Score von −100 bis +100. Ein positiver Wert steht für
+              kaufgeführten, ein negativer für verkaufgeführten Konsens — die Stärke (0 = kein
+              nennenswertes Signal, 100/−100 = maximale Konviktion) setzt sich zu gleichen Teilen
+              aus vier Faktoren zusammen:
             </p>
             <ol className="mt-3 space-y-2.5 border-l border-border pl-4">
               <li>
@@ -94,7 +96,10 @@ export default async function MethodikPage() {
             <p className="mt-3">
               Kauf-geführter Konsens wird danach zusätzlich mit ×1,15 gewichtet, Verkauf-geführter
               mit ×0,85 — unabhängiges Insider-Kaufen ist ein selteneres, freiwilligeres Signal als
-              routinemäßiges Verkaufen (z. B. zur Diversifikation oder Steuerzahlung).
+              routinemäßiges Verkaufen (z. B. zur Diversifikation oder Steuerzahlung). Das Ergebnis
+              wird bei Verkauf-geführtem Konsens negativ ausgegeben, bei Kauf-geführtem positiv —
+              die Zahl allein zeigt damit sofort die Richtung, ohne dass die Beschriftung daneben
+              gelesen werden muss.
             </p>
             <p className="mt-3">
               Nur echte Marktkäufe/-verkäufe (SEC-Transaktionscodes P/S) fließen in den Score ein —
@@ -133,20 +138,22 @@ export default async function MethodikPage() {
               erfassen keine Nachmeldungen/Amendments.
             </p>
             <p className="mt-3">
-              Der &bdquo;Smart-Money-Konsens&ldquo;-Score (0–100, auf{" "}
+              Der &bdquo;Smart-Money-Konsens&ldquo;-Score (−100 bis +100, positiv = aufbaugeführt,
+              negativ = abbaugeführt, auf{" "}
               <Link href="/institutional" className="text-accent hover:underline">
                 /institutional
               </Link>
               ) überträgt dieselbe Logik wie der Signal Score auf institutionelle Daten: rollierend
               über die letzten bis zu 4 verfügbaren Quartale wird pro Aktie verglichen, wie viele
-              der 20 Fonds ihre Position auf- bzw. abgebaut haben. Der Score ist zu gleichen Teilen
-              zusammengesetzt aus (1) dem Anteil der Fonds auf der führenden Seite an allen in
-              dieser Aktie aktiven Fonds, (2) deren Anteil am gesamten bewegten Dollar-Volumen und
-              (3) dem durchschnittlichen Anteil des jeweiligen Portfolio-Gewichts, das neu
-              hinzukam bzw. abgebaut wurde — ein Fonds, der eine Position von 0 auf 3 % seines
-              Portfolios aufbaut, zählt stärker als einer, der eine bereits große Position nur
-              geringfügig aufstockt. Aufbau-geführter Konsens wird mit ×1,15 gewichtet,
-              Abbau-geführter mit ×0,85 — dieselbe Asymmetrie wie beim Insider-Signal-Score.
+              der 20 Fonds ihre Position auf- bzw. abgebaut haben. Die Stärke des Scores ist zu
+              gleichen Teilen zusammengesetzt aus (1) dem Anteil der Fonds auf der führenden Seite
+              an allen in dieser Aktie aktiven Fonds, (2) deren Anteil am gesamten bewegten
+              Dollar-Volumen und (3) dem durchschnittlichen Anteil des jeweiligen
+              Portfolio-Gewichts, das neu hinzukam bzw. abgebaut wurde — ein Fonds, der eine
+              Position von 0 auf 3 % seines Portfolios aufbaut, zählt stärker als einer, der eine
+              bereits große Position nur geringfügig aufstockt. Aufbau-geführter Konsens wird mit
+              ×1,15 gewichtet und positiv ausgegeben, Abbau-geführter mit ×0,85 und negativ —
+              dieselbe Asymmetrie und dasselbe Vorzeichen-Prinzip wie beim Insider-Signal-Score.
               Mindestens 2 Fonds müssen in der Aktie aktiv sein, damit ein Score berechnet wird.
               Bewusst getrennt vom Insider-Signal-Score gehalten (kein kombiniertes Cross-Signal,
               Stand heute).

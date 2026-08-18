@@ -6,16 +6,10 @@ import Sparkline from "@/components/ui/Sparkline";
 import ComparePicker from "@/components/ui/ComparePicker";
 import { getTickerComparisonData, type TickerComparisonData } from "@/lib/tickerDetail";
 import { slugifyIndustry } from "@/lib/sectors";
-import { fmtUsd, fmtDate, sideChipClass } from "@/lib/format";
+import { fmtUsd, fmtDate, fmtSignalScore, scoreTierClass, sideChipClass } from "@/lib/format";
 import { pageMetadata, SITE_URL } from "@/lib/seo";
 
 export const revalidate = 1800; // same ISR window as /company/[ticker] — public page, keeps crawler/refresh load off the DB
-
-function scoreTierClass(score: number): string {
-  if (score >= 80) return "border-accent text-accent";
-  if (score >= 50) return "border-border text-text-dim";
-  return "border-border text-text-faint";
-}
 
 export async function generateMetadata({
   params,
@@ -66,9 +60,8 @@ function CompareColumn({ data }: { data: TickerComparisonData }) {
                   <span
                     className={`inline-flex items-center rounded-md border px-1.5 py-0.5 font-mono font-bold ${scoreTierClass(data.signalScore)}`}
                   >
-                    {data.signalScore}
+                    {fmtSignalScore(data.signalScore)}
                   </span>
-                  /100
                 </p>
               ) : (
                 <p className="mt-1 text-[13px] text-text-faint">Kein aktives Signal in den letzten 30 Tagen.</p>

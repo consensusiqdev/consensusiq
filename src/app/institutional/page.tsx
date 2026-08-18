@@ -5,7 +5,7 @@ import Badge from "@/components/ui/Badge";
 import FundHoldingsList from "@/components/institutional/FundHoldingsList";
 import { computeInstitutionalConsensus, getBiggestInstitutionalMoves, getInstitutionalOverview } from "@/lib/institutional";
 import { INSTITUTIONAL_FILERS } from "@/lib/institutionalFilers";
-import { fmtDate, fmtPct, fmtUsd } from "@/lib/format";
+import { fmtDate, fmtPct, fmtSignalScore, fmtUsd, scoreTierClass } from "@/lib/format";
 import { pageMetadata } from "@/lib/seo";
 import type { FundOverview, InstitutionalConsensusSignal, InstitutionalMove } from "@/types/filing";
 
@@ -16,12 +16,6 @@ export const metadata: Metadata = pageMetadata({
 });
 
 export const revalidate = 3600; // 13F only refreshes 1x/24h server-side, no reason to compute this more often
-
-function scoreTierClass(score: number): string {
-  if (score >= 80) return "border-accent text-accent";
-  if (score >= 50) return "border-border text-text-dim";
-  return "border-border text-text-faint";
-}
 
 export default async function InstitutionalPage() {
   const [funds, moves, consensus] = await Promise.all([
@@ -99,7 +93,7 @@ function ConsensusRow({ c }: { c: InstitutionalConsensusSignal }) {
       <div
         className={`flex shrink-0 flex-col items-center justify-center rounded-md border px-2 py-1 ${scoreTierClass(c.consensusScore)}`}
       >
-        <span className="font-mono text-[14px] font-bold leading-none">{c.consensusScore}</span>
+        <span className="font-mono text-[14px] font-bold leading-none">{fmtSignalScore(c.consensusScore)}</span>
         <span className="mt-0.5 font-mono text-[8px] uppercase leading-none tracking-wide">Score</span>
       </div>
 

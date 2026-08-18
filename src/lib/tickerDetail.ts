@@ -30,9 +30,10 @@ export type TickerDetail = {
   signalHistory: SignalHistoryPoint[];
   peers: TickerSignal[];
   // Where this ticker's current score ranks among every OTHER ticker with an active signal right
-  // now, same window/$-threshold basis as signalScore itself (0-100, "stronger than N% of..."),
-  // and how many other tickers that comparison is against. null/0 when there's no active signal
-  // to rank, or nothing else currently active to compare against.
+  // now, same window/$-threshold basis as signalScore itself ("stronger than N% of..." by
+  // magnitude, direction-agnostic — see the abs() comparison in getTickerDetail below), and how
+  // many other tickers that comparison is against. null/0 when there's no active signal to rank,
+  // or nothing else currently active to compare against.
   scorePercentile: number | null;
   activeSignalCount: number;
 };
@@ -225,7 +226,11 @@ export async function getTickerDetail(ticker: string): Promise<TickerDetail> {
       const others = allActive.filter((s) => s.ticker !== ticker);
       activeSignalCount = others.length;
       if (others.length > 0) {
-        const below = others.filter((s) => s.signalScore <= currentSignal.signalScore).length;
+        // By magnitude, not signed value — "stronger" means more conviction in either direction,
+        // so an extreme sell-off (e.g. -95) should rank near the top, not near the bottom just
+        // because it's numerically less than a middling buy signal.
+        const currentMagnitude = Math.abs(currentSignal.signalScore);
+        const below = others.filter((s) => Math.abs(s.signalScore) <= currentMagnitude).length;
         scorePercentile = Math.round((below / others.length) * 100);
       }
     } catch (err) {
@@ -240,7 +245,7 @@ export async function getTickerDetail(ticker: string): Promise<TickerDetail> {
     const overview = await getSectorOverview(industry);
     peers = overview.signals
       .filter((s) => s.ticker !== ticker)
-      .sort((a, b) => b.signalScore - a.signalScore)
+      .sort((a, b) => Math.abs(b.signalScore) - Math.abs(a.signalScore))
       .slice(0, PEER_LIMIT);
   }
 

@@ -25,7 +25,9 @@ export default function Sparkline({
 
   const padY = 4;
   const x = (i: number) => (points.length > 1 ? (i / (points.length - 1)) * width : width / 2);
-  const y = (score: number) => height - padY - (score / 100) * (height - 2 * padY);
+  // Score range is -100..100 (0 = neutral) — center it vertically instead of anchoring 0 at the
+  // bottom, otherwise every sell-led (negative) point would plot off-chart below the frame.
+  const y = (score: number) => height / 2 - (score / 100) * (height / 2 - padY);
 
   // Split into runs of consecutive non-null points so the polyline never bridges a gap.
   const runs: { i: number; score: number }[][] = [];
@@ -45,6 +47,15 @@ export default function Sparkline({
 
   return (
     <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height} className="overflow-visible">
+      <line
+        x1={0}
+        x2={width}
+        y1={height / 2}
+        y2={height / 2}
+        stroke="var(--color-border)"
+        strokeWidth={1}
+        strokeDasharray="2 2"
+      />
       {runs.map((run, ri) => (
         <polyline
           key={ri}

@@ -17,7 +17,7 @@ export function buildTweetText(signal: TickerSignal): string {
   const link = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard`;
   return (
     `🔍 ${signal.leadCount} insiders independently bought $${signal.ticker} ` +
-    `(Signal Score: ${signal.signalScore}/100)\n\n${link}\n\n#insidertrading #stocks`
+    `(Signal Score: ${signal.signalScore})\n\n${link}\n\n#insidertrading #stocks`
   );
 }
 

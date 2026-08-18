@@ -431,7 +431,9 @@ export async function computeInstitutionalConsensus(limit = 20): Promise<Institu
 
     const rawScore = 100 * ((headcountRatio + dollarWeightedRatio + avgConvictionRatio) / 3);
     const sideMultiplier = leadSide === "ACCUMULATING" ? 1.15 : 0.85;
-    const consensusScore = Math.round(Math.min(100, Math.max(0, rawScore * sideMultiplier)));
+    const magnitude = Math.round(Math.min(100, Math.max(0, rawScore * sideMultiplier)));
+    // Same signed convention as the insider Signal Score — distribution-led reads negative.
+    const consensusScore = leadSide === "DISTRIBUTING" ? -magnitude : magnitude;
 
     const netValueChangeUsd = trends.reduce((sum, t) => sum + (t.end - t.start), 0);
     const quartersUsed = Math.max(...trends.map((t) => sortedQuarters.filter((q) => byFund.get(t.fundCik)?.has(q)).length));
@@ -452,6 +454,6 @@ export async function computeInstitutionalConsensus(limit = 20): Promise<Institu
     });
   }
 
-  signals.sort((a, b) => b.consensusScore - a.consensusScore || Math.abs(b.netValueChangeUsd) - Math.abs(a.netValueChangeUsd));
+  signals.sort((a, b) => Math.abs(b.consensusScore) - Math.abs(a.consensusScore) || Math.abs(b.netValueChangeUsd) - Math.abs(a.netValueChangeUsd));
   return signals.slice(0, limit);
 }

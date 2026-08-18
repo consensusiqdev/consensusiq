@@ -6,9 +6,14 @@ export const contentType = "image/png";
 export const revalidate = 1800; // matches the page's own ISR window — link-preview crawlers refetch this often
 
 function scoreColor(score: number): string {
-  if (score >= 80) return "#e3a63e";
-  if (score >= 50) return "#8b939f";
+  const abs = Math.abs(score);
+  if (abs >= 80) return score >= 0 ? "#35c488" : "#e1615b";
+  if (abs >= 50) return "#8b939f";
   return "#565d68";
+}
+
+function fmtScore(score: number): string {
+  return score > 0 ? `+${score}` : String(score);
 }
 
 export default async function Image({ params }: { params: Promise<{ ticker: string }> }) {
@@ -54,7 +59,7 @@ export default async function Image({ params }: { params: Promise<{ ticker: stri
                 }}
               >
                 <div style={{ fontSize: 68, fontWeight: 700, color: scoreColor(summary.signalScore), display: "flex" }}>
-                  {summary.signalScore}
+                  {fmtScore(summary.signalScore)}
                 </div>
                 <div style={{ fontSize: 20, color: "#8b939f", display: "flex" }}>SIGNAL SCORE</div>
               </div>

@@ -1,22 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { TickerSignal } from "@/types/filing";
 import ConvictionBar from "@/components/ui/ConvictionBar";
 import Badge from "@/components/ui/Badge";
-import { fmtAcquisitionLabel, fmtDate, fmtPct, fmtRelativeTime, fmtShares, fmtUsd, sideChipClass } from "@/lib/format";
+import {
+  fmtAcquisitionLabel,
+  fmtDate,
+  fmtPct,
+  fmtRelativeTime,
+  fmtShares,
+  fmtSignalScore,
+  fmtUsd,
+  scoreTierClass,
+  sideChipClass,
+} from "@/lib/format";
 import { pctOfPriorHoldings } from "@/lib/consensus";
 import WatchButton from "@/components/ui/WatchButton";
 import InsiderDetailModal from "@/components/dashboard/InsiderDetailModal";
 
-function scoreTierClass(score: number): string {
-  if (score >= 80) return "border-accent text-accent";
-  if (score >= 50) return "border-border text-text-dim";
-  return "border-border text-text-faint";
-}
-
-/** Breaks the 0-100 signalScore back down into its four equally-weighted quarters plus the
+/** Breaks the signalScore back down into its four equally-weighted quarters plus the
  *  buy/sell multiplier — mirrors the exact math in consensus.ts's summarizeTickers(). */
 function scoreBreakdown(signal: TickerSignal) {
   const quarter = 100 / 4;
@@ -29,22 +33,25 @@ function scoreBreakdown(signal: TickerSignal) {
   return { headcountPts, dollarPts, holdingsPts, tightnessPts, rawScore, afterMultiplier };
 }
 
-function ScoreTooltip({ signal }: { signal: TickerSignal }) {
+function ScoreTooltip({ signal, open }: { signal: TickerSignal; open: boolean }) {
   const { headcountPts, dollarPts, holdingsPts, tightnessPts, rawScore, afterMultiplier } = scoreBreakdown(signal);
   const multiplierLabel =
     signal.leadSide === "BUY"
       ? `× ${signal.sideMultiplier.toFixed(2)} (kaufgeführter Konsens)`
-      : `× ${signal.sideMultiplier.toFixed(2)} (verkaufgeführter Konsens)`;
-  const wasClamped = afterMultiplier !== signal.signalScore && (afterMultiplier > 100 || afterMultiplier < 0);
+      : `× ${signal.sideMultiplier.toFixed(2)} (verkaufgeführter Konsens, → negativ)`;
+  const magnitude = Math.abs(signal.signalScore);
+  const wasClamped = Math.round(afterMultiplier) !== magnitude && (afterMultiplier > 100 || afterMultiplier < 0);
 
   return (
     <div
       role="tooltip"
-      className="pointer-events-none absolute left-1/2 top-full z-30 mt-2 hidden w-64 -translate-x-1/2 rounded-lg border border-border bg-bg-panel-2 p-3 font-mono text-[11px] leading-relaxed text-text-dim shadow-lg group-hover:block"
+      className={`pointer-events-none absolute left-1/2 top-full z-30 mt-2 w-64 -translate-x-1/2 rounded-lg border border-border bg-bg-panel-2 p-3 font-mono text-[11px] leading-relaxed text-text-dim shadow-lg group-hover:block ${
+        open ? "block" : "hidden"
+      }`}
     >
       <div className="mb-2 flex items-baseline justify-between text-text">
         <span className="text-[10px] uppercase tracking-wide text-text-faint">Signal Score</span>
-        <span className="text-[13px] font-bold">{signal.signalScore}</span>
+        <span className="text-[13px] font-bold">{fmtSignalScore(signal.signalScore)}</span>
       </div>
 
       <div className="flex justify-between">
@@ -75,8 +82,43 @@ function ScoreTooltip({ signal }: { signal: TickerSignal }) {
 
       <div className="mt-1.5 flex justify-between border-t border-border pt-1.5 text-text">
         <span className="font-semibold">Signal Score{wasClamped ? " (gedeckelt)" : ""}</span>
-        <span className="font-bold">{signal.signalScore}</span>
+        <span className="font-bold">{fmtSignalScore(signal.signalScore)}</span>
       </div>
+      <p className="mt-1.5 border-t border-dashed border-border pt-1.5 text-text-faint">
+        Skala −100 (starker Verkauf) bis +100 (starker Kauf).
+      </p>
+    </div>
+  );
+}
+
+/** Score badge with the breakdown tooltip: hover shows it on desktop (CSS `group-hover`), tapping
+ *  toggles it explicitly so the same explanation is reachable on touch devices, which have no
+ *  hover state at all. Click-outside-closes mirrors CrossSignalBadge's existing tap-popover pattern. */
+function ScoreBadge({ signal }: { signal: TickerSignal }) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    window.addEventListener("click", onClickOutside);
+    return () => window.removeEventListener("click", onClickOutside);
+  }, [open]);
+
+  return (
+    <div
+      ref={containerRef}
+      className={`group relative flex shrink-0 flex-col items-center justify-center rounded-md border px-2 py-1 ${scoreTierClass(signal.signalScore)}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        setOpen((v) => !v);
+      }}
+    >
+      <span className="font-mono text-[15px] font-bold leading-none">{fmtSignalScore(signal.signalScore)}</span>
+      <span className="mt-0.5 font-mono text-[8px] uppercase leading-none tracking-wide">Score</span>
+      <ScoreTooltip signal={signal} open={open} />
     </div>
   );
 }
@@ -100,17 +142,7 @@ export default function TickerCard({
     >
       <div className="flex flex-wrap items-start justify-between gap-3.5">
         <div className="flex items-start gap-2.5">
-          <div
-            className={`group relative flex shrink-0 flex-col items-center justify-center rounded-md border px-2 py-1 ${scoreTierClass(signal.signalScore)}`}
-          >
-            <span className="font-mono text-[15px] font-bold leading-none">
-              {signal.signalScore}
-            </span>
-            <span className="mt-0.5 font-mono text-[8px] uppercase leading-none tracking-wide">
-              Score
-            </span>
-            <ScoreTooltip signal={signal} />
-          </div>
+          <ScoreBadge signal={signal} />
 
           <Link
             href={`/company/${signal.ticker}`}

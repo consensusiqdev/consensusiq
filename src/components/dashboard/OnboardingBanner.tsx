@@ -37,7 +37,8 @@ export default function OnboardingBanner() {
       <p className="font-mono text-[12.5px] leading-relaxed text-text-dim">
         <strong className="text-text">Was ist ein Signal Score?</strong> InsiderAlign zeigt Aktien,
         bei denen mehrere Vorstände, Directors oder Großaktionäre unabhängig voneinander in dieselbe
-        Richtung handeln — je höher der Score (0–100), desto breiter der Konsens.{" "}
+        Richtung handeln — der Score reicht von −100 (starker Verkauf) bis +100 (starker Kauf),
+        je weiter er von 0 entfernt ist, desto breiter der Konsens.{" "}
         <Link href="/methodik" className="text-accent hover:underline">
           Wie er berechnet wird →
         </Link>

@@ -53,6 +53,22 @@ export function sideColor(side: string): string {
   return side === "BUY" ? "var(--color-yes)" : "var(--color-no)";
 }
 
+/** Explicit "+"/"-" sign on a -100..100 score — relying on the bare minus alone reads too subtly
+ *  in a small badge, and a plain positive number could otherwise be mistaken for unsigned. */
+export function fmtSignalScore(score: number): string {
+  return score > 0 ? `+${score}` : String(score);
+}
+
+/** Badge border/text color for a -100..100 score: intensity from magnitude (how strong the
+ *  consensus is), hue from sign (green = buy/accumulating, red = sell/distributing) — so a
+ *  strong sell-off badge doesn't fade into "unremarkable" just because the number is negative. */
+export function scoreTierClass(score: number): string {
+  const abs = Math.abs(score);
+  if (abs >= 80) return score >= 0 ? "border-yes text-yes" : "border-no text-no";
+  if (abs >= 50) return "border-border text-text-dim";
+  return "border-border text-text-faint";
+}
+
 export function fmtCompanyEventLabel(e: CompanyEvent): string {
   switch (e.type) {
     case "AGM_ANNOUNCED":

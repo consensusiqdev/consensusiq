@@ -29,7 +29,8 @@ export default async function SectorPage({ params }: { params: Promise<{ slug: s
   if (!industry) notFound();
 
   const [overview, trendHistory] = await Promise.all([getSectorOverview(industry), getSectorSignalHistory(industry)]);
-  const signals = [...overview.signals].sort((a, b) => b.signalScore - a.signalScore);
+  // By strength, not raw signed value — same reasoning as the dashboard's "score" sort.
+  const signals = [...overview.signals].sort((a, b) => Math.abs(b.signalScore) - Math.abs(a.signalScore));
   const trend = summarizeIndustryTrend(trendHistory);
 
   const breadcrumbJsonLd = {

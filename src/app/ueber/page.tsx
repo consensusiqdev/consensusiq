@@ -17,7 +17,7 @@ const FEATURES = [
   },
   {
     title: "Gewichteter Signal Score",
-    body: "Kombiniert Kopfzahl, Dollar-Volumen und den Anteil des jeweils eigenen Bestands, der gehandelt wurde, zu einer 0–100-Kennzahl pro Ticker — Insider-Käufe zählen dabei stärker als Verkäufe.",
+    body: "Kombiniert Kopfzahl, Dollar-Volumen und den Anteil des jeweils eigenen Bestands, der gehandelt wurde, zu einer Kennzahl von −100 (starker Verkauf) bis +100 (starker Kauf) pro Ticker — unabhängiges Insider-Kaufen zählt dabei stärker als Verkaufen.",
   },
   {
     title: "Insider-Rolle",

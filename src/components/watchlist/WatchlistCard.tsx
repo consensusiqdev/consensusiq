@@ -5,14 +5,8 @@ import Link from "next/link";
 import Badge from "@/components/ui/Badge";
 import CrossSignalBadge from "@/components/ui/CrossSignalBadge";
 import Sparkline from "@/components/ui/Sparkline";
-import { fmtUsd } from "@/lib/format";
+import { fmtSignalScore, fmtUsd, scoreTierClass } from "@/lib/format";
 import type { TickerDetail } from "@/lib/tickerDetail";
-
-function scoreTierClass(score: number): string {
-  if (score >= 80) return "border-accent text-accent";
-  if (score >= 50) return "border-border text-text-dim";
-  return "border-border text-text-faint";
-}
 
 /** Per-watchlist-ticker summary card — deliberately fetches the same /api/ticker-detail the
  * dashboard modal and /company/[ticker] use, rather than the dashboard's TickerSignal shape, since
@@ -80,7 +74,7 @@ export default function WatchlistCard({
             }`}
           >
             <span className="font-mono text-[15px] font-bold leading-none">
-              {detail.signalScore ?? "—"}
+              {detail.signalScore != null ? fmtSignalScore(detail.signalScore) : "—"}
             </span>
             <span className="mt-0.5 font-mono text-[8px] uppercase leading-none tracking-wide">Score</span>
           </div>

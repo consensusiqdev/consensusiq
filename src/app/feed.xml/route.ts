@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getFilteredSignals, parseSignalsQueryParams } from "@/lib/signalsQuery";
-import { fmtUsd } from "@/lib/format";
+import { fmtSignalScore, fmtUsd } from "@/lib/format";
 import { SITE_NAME, SITE_URL } from "@/lib/seo";
 
 function xmlEscape(s: string): string {
@@ -25,10 +25,10 @@ export async function GET(request: NextRequest) {
     .map((s) => {
       const link = `${SITE_URL}/company/${s.ticker}`;
       const sideLabel = s.leadSide === "BUY" ? "Kauf" : "Verkauf";
-      const title = xmlEscape(`${s.ticker} — Signal Score ${s.signalScore} (${sideLabel})`);
+      const title = xmlEscape(`${s.ticker} — Signal Score ${fmtSignalScore(s.signalScore)} (${sideLabel})`);
       const description = xmlEscape(
         `${s.companyName}: ${s.leadCount}/${s.totalParticipants} Insider auf der ${sideLabel}-Seite, ` +
-          `Signal Score ${s.signalScore}/100, ${fmtUsd(s.totalValueAll)} Gesamtvolumen.`
+          `Signal Score ${fmtSignalScore(s.signalScore)}, ${fmtUsd(s.totalValueAll)} Gesamtvolumen.`
       );
       const pubDate = new Date(s.consensusSince ?? Date.now()).toUTCString();
 

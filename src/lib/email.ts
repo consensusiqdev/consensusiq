@@ -1,6 +1,6 @@
 import { Resend } from "resend";
 import type { Transaction, TickerSignal } from "@/types/filing";
-import { fmtDate, fmtShares, fmtUsd } from "@/lib/format";
+import { fmtDate, fmtShares, fmtSignalScore, fmtUsd } from "@/lib/format";
 import { SITE_URL } from "@/lib/seo";
 
 let resendClient: Resend | null = null;
@@ -83,7 +83,7 @@ function renderScreenSignalRow(s: TickerSignal): string {
       <td style="padding:6px 10px;font-family:monospace;font-size:12px;color:${color};font-weight:600;">${s.leadSide}</td>
       <td style="padding:6px 10px;font-family:monospace;font-size:12px;"><a href="${SITE_URL}/company/${s.ticker}" style="color:inherit;">${s.ticker}</a></td>
       <td style="padding:6px 10px;font-size:13px;">${s.companyName}</td>
-      <td style="padding:6px 10px;font-family:monospace;font-size:12px;">${s.signalScore}/100</td>
+      <td style="padding:6px 10px;font-family:monospace;font-size:12px;">${fmtSignalScore(s.signalScore)}</td>
       <td style="padding:6px 10px;font-family:monospace;font-size:12px;">${s.leadCount}/${s.totalParticipants}</td>
       <td style="padding:6px 10px;font-family:monospace;font-size:12px;">${fmtUsd(s.totalValueAll)}</td>
     </tr>`;

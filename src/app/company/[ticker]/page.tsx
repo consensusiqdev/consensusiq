@@ -9,16 +9,10 @@ import Sparkline from "@/components/ui/Sparkline";
 import EventItem from "@/components/dashboard/EventItem";
 import { getTickerDetail } from "@/lib/tickerDetail";
 import { slugifyIndustry } from "@/lib/sectors";
-import { fmtUsd } from "@/lib/format";
+import { fmtSignalScore, fmtUsd, scoreTierClass } from "@/lib/format";
 import { pageMetadata, SITE_URL } from "@/lib/seo";
 
 export const revalidate = 1800; // public/SEO page — 30min ISR keeps crawler load off the DB without going stale
-
-function scoreTierClass(score: number): string {
-  if (score >= 80) return "border-accent text-accent";
-  if (score >= 50) return "border-border text-text-dim";
-  return "border-border text-text-faint";
-}
 
 export async function generateMetadata({
   params,
@@ -29,7 +23,8 @@ export async function generateMetadata({
   const ticker = rawTicker.toUpperCase();
   const detail = await getTickerDetail(ticker);
 
-  const scoreText = detail.signalScore != null ? `Signal Score ${detail.signalScore}/100` : "noch kein aktives Signal";
+  const scoreText =
+    detail.signalScore != null ? `Signal Score ${fmtSignalScore(detail.signalScore)}` : "noch kein aktives Signal";
   const industryText = detail.industry ? ` — ${detail.industry}` : "";
   const title = `${ticker} Insider-Trades & Signal Score | InsiderAlign`;
   const description = `${detail.companyName}: ${detail.stats.distinctFilers} bekannte Insider, ${scoreText}${industryText}. Alle SEC-Form-4-Insidergeschäfte und Positionen im Überblick.`;
@@ -108,9 +103,9 @@ export default async function CompanyPage({ params }: { params: Promise<{ ticker
                   <span
                     className={`inline-flex items-center rounded-md border px-1.5 py-0.5 font-mono font-bold ${scoreTierClass(detail.signalScore)}`}
                   >
-                    {detail.signalScore}
+                    {fmtSignalScore(detail.signalScore)}
                   </span>
-                  /100.
+                  .
                 </p>
               ) : (
                 <p className="mt-1 text-sm text-text-faint">Kein aktives Signal in den letzten 30 Tagen.</p>
