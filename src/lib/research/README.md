@@ -130,11 +130,10 @@ Kurse lassen sich sofort Jahre zurück laden; die Insider-Meldungen sind der Eng
 Historie zu dünn ist, meldet der Bericht das ehrlich, statt Zahlen auszugeben, die nach etwas
 aussehen. Sobald genug Zeit vergangen ist, wird derselbe Aufruf ohne Änderung aussagekräftig.
 
-Wer das beschleunigen will, müsste Form-4-Meldungen historisch nachladen (SEC EDGAR
-`full-index/{Jahr}/QTR{n}/form.idx` gibt alle Accession-Nummern eines Quartals; der vorhandene
-Parser `fetchTransactionsForAccessions()` in `src/lib/secEdgar.ts` kann sie direkt verarbeiten).
-Bei SECs Limit von 10 Anfragen/Sekunde ist das ein Lauf über Stunden bis Tage — eigenes Vorhaben,
-bewusst nicht Teil dieses Werkzeugs.
+Wer das beschleunigen will, müsste Form-4-Meldungen historisch nachladen. Der Weg dahin steht als
+konkreter Plan in **[BACKFILL.md](./BACKFILL.md)** — inklusive der Stelle, an der ein naiver
+Nachlauf den Backtest still verfälschen würde (`is_plan_trade` gibt es erst ab 2023). Eigenes
+Vorhaben, bewusst nicht Teil dieses Werkzeugs.
 
 ## Optionen
 
