@@ -507,6 +507,7 @@ export type InstitutionalHoldingRow = {
   fund_name: string;
   cusip: string;
   ticker: string | null;
+  issuer_name: string;
   quarter: string;
   shares: number | null;
   value_usd: number | null;
@@ -514,7 +515,7 @@ export type InstitutionalHoldingRow = {
   source_url: string;
 };
 
-const institutionalActivitySql = `SELECT fund_cik, fund_name, cusip, ticker, quarter, shares, value_usd, filed_date, source_url
+const institutionalActivitySql = `SELECT fund_cik, fund_name, cusip, ticker, issuer_name, quarter, shares, value_usd, filed_date, source_url
    FROM institutional_holdings WHERE ticker = ? ORDER BY fund_cik, quarter DESC`;
 
 /** All tracked-fund holding snapshots for a ticker, newest quarter first per fund — caller diffs consecutive quarters per fund. */

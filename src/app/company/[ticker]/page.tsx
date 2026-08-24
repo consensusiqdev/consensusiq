@@ -3,11 +3,11 @@ import Link from "next/link";
 import TopBar from "@/components/Layout/TopBar";
 import CompanyInsidersClient from "@/components/company/CompanyInsidersClient";
 import CompanyHistoryButton from "@/components/company/CompanyHistoryButton";
+import InstitutionalPanel from "@/components/company/InstitutionalPanel";
 import Badge from "@/components/ui/Badge";
-import CrossSignalBadge from "@/components/ui/CrossSignalBadge";
 import Sparkline from "@/components/ui/Sparkline";
 import EventItem from "@/components/dashboard/EventItem";
-import { getTickerDetail } from "@/lib/tickerDetail";
+import { CURRENT_WINDOW_DAYS, getTickerDetail } from "@/lib/tickerDetail";
 import { slugifyIndustry } from "@/lib/sectors";
 import { fmtSignalScore, fmtUsd, scoreTierClass } from "@/lib/format";
 import { pageMetadata, SITE_URL } from "@/lib/seo";
@@ -71,7 +71,6 @@ export default async function CompanyPage({ params }: { params: Promise<{ ticker
               <Badge variant="accent">{detail.industry}</Badge>
             </Link>
           )}
-          <CrossSignalBadge events={detail.institutionalEvents} />
           <CompanyHistoryButton ticker={ticker} />
           <Link
             href={`/compare?a=${ticker}`}
@@ -152,6 +151,17 @@ export default async function CompanyPage({ params }: { params: Promise<{ ticker
             </div>
           )}
         </div>
+
+        {/* Directly below the insider score on purpose: this is where a visitor arriving from
+            /institutional's Smart-Money-Konsens list needs to see how the fund side relates to the
+            insider number they just read, rather than finding a badge and clicking it. */}
+        <InstitutionalPanel
+          events={detail.institutionalEvents}
+          consensus={detail.institutionalConsensus}
+          insiderScore={detail.signalScore}
+          insiderLeadSide={detail.leadSide}
+          insiderWindowDays={CURRENT_WINDOW_DAYS}
+        />
 
         {detail.companyEvents.length > 0 && (
           <div className="mt-6 rounded-xl border border-border bg-bg-panel p-5">

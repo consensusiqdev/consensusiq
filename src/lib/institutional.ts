@@ -384,76 +384,148 @@ export async function computeInstitutionalConsensus(limit = 20): Promise<Institu
   const signals: InstitutionalConsensusSignal[] = [];
 
   for (const [ticker, byFund] of byTicker) {
-    const trends: FundTickerTrend[] = [];
-
-    for (const [fundCik, byQuarter] of byFund) {
-      const quartersPresent = sortedQuarters.filter((q) => byQuarter.has(q));
-      if (quartersPresent.length < 2) continue; // only one data point — no trend to measure
-
-      const firstQ = quartersPresent[0];
-      const lastQ = quartersPresent[quartersPresent.length - 1];
-      const start = byQuarter.get(firstQ)!;
-      const end = byQuarter.get(lastQ)!;
-      if (start === end) continue; // unchanged — not part of a "move"
-
-      const startTotal = fundTotals.get(`${fundCik}:${firstQ}`) ?? 0;
-      const endTotal = fundTotals.get(`${fundCik}:${lastQ}`) ?? 0;
-      trends.push({
-        fundCik,
-        fundName: fundNameByCik.get(fundCik) ?? fundCik,
-        start,
-        end,
-        startWeight: startTotal > 0 ? start / startTotal : 0,
-        endWeight: endTotal > 0 ? end / endTotal : 0,
-      });
-    }
-
-    if (trends.length < MIN_ACTIVE_FUNDS) continue;
-
-    const accumulating = trends.filter((t) => t.end > t.start);
-    const distributing = trends.filter((t) => t.end < t.start);
-    const leadSide: "ACCUMULATING" | "DISTRIBUTING" = accumulating.length >= distributing.length ? "ACCUMULATING" : "DISTRIBUTING";
-    const leading = leadSide === "ACCUMULATING" ? accumulating : distributing;
-
-    const headcountRatio = leading.length / trends.length;
-
-    const totalAbsChange = trends.reduce((sum, t) => sum + Math.abs(t.end - t.start), 0);
-    const leadingAbsChange = leading.reduce((sum, t) => sum + Math.abs(t.end - t.start), 0);
-    const dollarWeightedRatio = totalAbsChange > 0 ? leadingAbsChange / totalAbsChange : 0;
-
-    // How much of the fund's OWN portfolio conviction shifted into (or out of) this position,
-    // not just headline dollars — a $50M add is trivial for a $600B portfolio but everything for
-    // a $2B one. Mirrors pctOfPriorHoldings()'s "ratio of a reference base" shape: bounded (0,1),
-    // a brand-new position (startWeight 0) scores the max 1, a fully-closed one (endWeight 0)
-    // scores the min 0 — consistent with "how much of the after-state is the new side."
-    const convictionRatios = leading.map((t) => (t.endWeight + t.startWeight > 0 ? t.endWeight / (t.endWeight + t.startWeight) : 0));
-    const avgConvictionRatio = convictionRatios.reduce((sum, r) => sum + r, 0) / convictionRatios.length;
-
-    const rawScore = 100 * ((headcountRatio + dollarWeightedRatio + avgConvictionRatio) / 3);
-    const sideMultiplier = leadSide === "ACCUMULATING" ? 1.15 : 0.85;
-    const magnitude = Math.round(Math.min(100, Math.max(0, rawScore * sideMultiplier)));
-    // Same signed convention as the insider Signal Score — distribution-led reads negative.
-    const consensusScore = leadSide === "DISTRIBUTING" ? -magnitude : magnitude;
-
-    const netValueChangeUsd = trends.reduce((sum, t) => sum + (t.end - t.start), 0);
-    const quartersUsed = Math.max(...trends.map((t) => sortedQuarters.filter((q) => byFund.get(t.fundCik)?.has(q)).length));
-
-    signals.push({
+    const signal = consensusFromFundTrends(
       ticker,
-      companyName: companyNameByTicker.get(ticker) ?? ticker,
-      fundsAccumulating: accumulating.length,
-      fundsDistributing: distributing.length,
-      leadSide,
-      headcountRatio,
-      dollarWeightedRatio,
-      avgConvictionRatio,
-      sideMultiplier,
-      consensusScore,
-      netValueChangeUsd,
-      quartersUsed,
-    });
+      companyNameByTicker.get(ticker) ?? ticker,
+      byFund,
+      sortedQuarters,
+      fundTotals,
+      fundNameByCik
+    );
+    if (signal) signals.push(signal);
   }
 
   signals.sort((a, b) => Math.abs(b.consensusScore) - Math.abs(a.consensusScore) || Math.abs(b.netValueChangeUsd) - Math.abs(a.netValueChangeUsd));
   return signals.slice(0, limit);
+}
+
+/**
+ * The consensus score for a single ticker, given that ticker's per-fund quarterly values. Split
+ * out of computeInstitutionalConsensus() so the company page can get the score for ONE ticker
+ * (via getInstitutionalConsensusForTicker below) without pulling every fund's entire holdings
+ * across four quarters — and, more importantly, so both paths share one definition of the score.
+ * A visitor arriving from /institutional must see the same number on the company page they just
+ * clicked; two copies of this formula would eventually disagree.
+ *
+ * `byFund` maps fund CIK -> quarter -> position value. Returns null when fewer than
+ * MIN_ACTIVE_FUNDS funds have a measurable trend — one fund moving alone is a decision, not a
+ * consensus.
+ */
+function consensusFromFundTrends(
+  ticker: string,
+  companyName: string,
+  byFund: Map<string, Map<string, number>>,
+  sortedQuarters: string[],
+  fundTotals: Map<string, number>,
+  fundNameByCik: Map<string, string>
+): InstitutionalConsensusSignal | null {
+  const trends: FundTickerTrend[] = [];
+
+  for (const [fundCik, byQuarter] of byFund) {
+    const quartersPresent = sortedQuarters.filter((q) => byQuarter.has(q));
+    if (quartersPresent.length < 2) continue; // only one data point — no trend to measure
+
+    const firstQ = quartersPresent[0];
+    const lastQ = quartersPresent[quartersPresent.length - 1];
+    const start = byQuarter.get(firstQ)!;
+    const end = byQuarter.get(lastQ)!;
+    if (start === end) continue; // unchanged — not part of a "move"
+
+    const startTotal = fundTotals.get(`${fundCik}:${firstQ}`) ?? 0;
+    const endTotal = fundTotals.get(`${fundCik}:${lastQ}`) ?? 0;
+    trends.push({
+      fundCik,
+      fundName: fundNameByCik.get(fundCik) ?? fundCik,
+      start,
+      end,
+      startWeight: startTotal > 0 ? start / startTotal : 0,
+      endWeight: endTotal > 0 ? end / endTotal : 0,
+    });
+  }
+
+  if (trends.length < MIN_ACTIVE_FUNDS) return null;
+
+  const accumulating = trends.filter((t) => t.end > t.start);
+  const distributing = trends.filter((t) => t.end < t.start);
+  const leadSide: "ACCUMULATING" | "DISTRIBUTING" = accumulating.length >= distributing.length ? "ACCUMULATING" : "DISTRIBUTING";
+  const leading = leadSide === "ACCUMULATING" ? accumulating : distributing;
+
+  const headcountRatio = leading.length / trends.length;
+
+  const totalAbsChange = trends.reduce((sum, t) => sum + Math.abs(t.end - t.start), 0);
+  const leadingAbsChange = leading.reduce((sum, t) => sum + Math.abs(t.end - t.start), 0);
+  const dollarWeightedRatio = totalAbsChange > 0 ? leadingAbsChange / totalAbsChange : 0;
+
+  // How much of the fund's OWN portfolio conviction shifted into (or out of) this position,
+  // not just headline dollars — a $50M add is trivial for a $600B portfolio but everything for
+  // a $2B one. Mirrors pctOfPriorHoldings()'s "ratio of a reference base" shape: bounded (0,1),
+  // a brand-new position (startWeight 0) scores the max 1, a fully-closed one (endWeight 0)
+  // scores the min 0 — consistent with "how much of the after-state is the new side."
+  const convictionRatios = leading.map((t) => (t.endWeight + t.startWeight > 0 ? t.endWeight / (t.endWeight + t.startWeight) : 0));
+  const avgConvictionRatio = convictionRatios.reduce((sum, r) => sum + r, 0) / convictionRatios.length;
+
+  const rawScore = 100 * ((headcountRatio + dollarWeightedRatio + avgConvictionRatio) / 3);
+  const sideMultiplier = leadSide === "ACCUMULATING" ? 1.15 : 0.85;
+  const magnitude = Math.round(Math.min(100, Math.max(0, rawScore * sideMultiplier)));
+  // Same signed convention as the insider Signal Score — distribution-led reads negative.
+  const consensusScore = leadSide === "DISTRIBUTING" ? -magnitude : magnitude;
+
+  const netValueChangeUsd = trends.reduce((sum, t) => sum + (t.end - t.start), 0);
+  const quartersUsed = Math.max(...trends.map((t) => sortedQuarters.filter((q) => byFund.get(t.fundCik)?.has(q)).length));
+
+  return {
+    ticker,
+    companyName,
+    fundsAccumulating: accumulating.length,
+    fundsDistributing: distributing.length,
+    leadSide,
+    headcountRatio,
+    dollarWeightedRatio,
+    avgConvictionRatio,
+    sideMultiplier,
+    consensusScore,
+    netValueChangeUsd,
+    quartersUsed,
+  };
+}
+
+/**
+ * The Smart-Money-Konsens score for one ticker — the same number the /institutional page ranks by,
+ * so a company page reached from that list can show what the visitor just clicked on instead of
+ * dropping the fund context entirely. Reads only this ticker's holdings plus the per-fund
+ * portfolio totals, rather than every fund's full book like computeInstitutionalConsensus() does.
+ *
+ * null means "no cross-fund consensus", not "no fund activity": a single fund moving, or funds
+ * with only one quarter on record, produce timeline events (getInstitutionalTimelineEvents) but no
+ * score. The company page shows the per-fund detail either way.
+ */
+export async function getInstitutionalConsensusForTicker(
+  ticker: string
+): Promise<InstitutionalConsensusSignal | null> {
+  const quarters = await getRecentGlobalQuarters(CONSENSUS_WINDOW_QUARTERS);
+  if (quarters.length < 2) return null; // no rolling comparison possible yet
+
+  const [rows, fundTotals] = await Promise.all([getInstitutionalActivity(ticker), getFundTotalsForQuarters(quarters)]);
+
+  const inWindow = new Set(quarters);
+  const byFund = new Map<string, Map<string, number>>();
+  const fundNameByCik = new Map<string, string>();
+  let companyName = ticker;
+
+  for (const row of rows) {
+    if (!inWindow.has(row.quarter)) continue;
+    fundNameByCik.set(row.fund_cik, row.fund_name);
+    if (row.issuer_name) companyName = row.issuer_name;
+
+    let byQuarter = byFund.get(row.fund_cik);
+    if (!byQuarter) {
+      byQuarter = new Map();
+      byFund.set(row.fund_cik, byQuarter);
+    }
+    // Summed, not overwritten — a fund can report the same ticker on several lines in one filing
+    // (different share classes resolving to one ticker). Mirrors computeInstitutionalConsensus().
+    byQuarter.set(row.quarter, (byQuarter.get(row.quarter) ?? 0) + (row.value_usd ?? 0));
+  }
+
+  return consensusFromFundTrends(ticker, companyName, byFund, [...quarters].sort(), fundTotals, fundNameByCik);
 }

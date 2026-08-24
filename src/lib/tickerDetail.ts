@@ -1,18 +1,25 @@
 import "server-only";
 import { getTickerHistory, getTickerIndustries } from "@/lib/db";
-import { getInstitutionalTimelineEvents } from "@/lib/institutional";
+import { getInstitutionalConsensusForTicker, getInstitutionalTimelineEvents } from "@/lib/institutional";
 import { enrichTransactionsWithAcquisitionHistory } from "@/lib/premium";
 import { fetchCompanyEvents } from "@/lib/secEdgar";
 import { buildTickerMap, computeSignalHistory, summarizeTickers, type SignalHistoryPoint } from "@/lib/consensus";
 import { getSectorOverview } from "@/lib/sectors";
 import { getFilteredSignals } from "@/lib/signalsQuery";
 import { getActiveSubscriberId } from "@/lib/subscription";
-import type { CompanyEvent, InstitutionalEvent, Transaction, TickerSignal, TransactionSide } from "@/types/filing";
+import type {
+  CompanyEvent,
+  InstitutionalConsensusSignal,
+  InstitutionalEvent,
+  Transaction,
+  TickerSignal,
+  TransactionSide,
+} from "@/types/filing";
 
 // Fixed window for the "current" signal score shown on public/SEO pages (company page, peers) —
 // same reasoning as sectors.ts: filter-independent, so numbers stay comparable across pages
 // regardless of what any individual visitor has set on the dashboard.
-const CURRENT_WINDOW_DAYS = 30;
+export const CURRENT_WINDOW_DAYS = 30;
 const MIN_USD = 1000;
 const PEER_LIMIT = 5;
 
@@ -24,6 +31,11 @@ export type TickerDetail = {
   transactions: Transaction[];
   companyEvents: CompanyEvent[];
   institutionalEvents: InstitutionalEvent[];
+  // The same Smart-Money-Konsens score the /institutional page ranks by, so a visitor arriving
+  // from that list sees the number they clicked on. null = no cross-fund consensus (fewer than 2
+  // funds with a measurable trend) — which is NOT the same as no fund activity, see
+  // institutionalEvents above.
+  institutionalConsensus: InstitutionalConsensusSignal | null;
   signalScore: number | null;
   leadSide: TransactionSide | null;
   leadCount: number;
@@ -164,7 +176,26 @@ export async function getTickerComparisonData(ticker: string): Promise<TickerCom
  * call this directly, so the two never drift out of sync.
  */
 export async function getTickerDetail(ticker: string): Promise<TickerDetail> {
-  const rows = await getTickerHistory(ticker);
+  // These five don't depend on each other, and fetchCompanyEvents() in particular is a live SEC
+  // EDGAR round trip behind a 120ms throttle — awaited one after another (as this used to be) the
+  // page waited for their sum instead of their max, which is most of why it felt slow.
+  const [rows, companyEvents, institutionalEvents, institutionalConsensus, industries] = await Promise.all([
+    getTickerHistory(ticker),
+    fetchCompanyEvents(ticker).catch((err) => {
+      console.warn(`[tickerDetail] Company-Events für ${ticker} konnten nicht geladen werden:`, err);
+      return [] as CompanyEvent[];
+    }),
+    getInstitutionalTimelineEvents(ticker).catch((err) => {
+      console.warn(`[tickerDetail] Institutionelle Aktivität für ${ticker} konnte nicht geladen werden:`, err);
+      return [] as InstitutionalEvent[];
+    }),
+    getInstitutionalConsensusForTicker(ticker).catch((err) => {
+      console.warn(`[tickerDetail] Smart-Money-Konsens für ${ticker} konnte nicht berechnet werden:`, err);
+      return null;
+    }),
+    getTickerIndustries(),
+  ]);
+
   const allTransactions = mapRowsToTransactions(ticker, rows);
 
   // The visible trading-history list stays open-market-only, same reasoning as /api/signals —
@@ -187,19 +218,6 @@ export async function getTickerDetail(ticker: string): Promise<TickerDetail> {
     await enrichTransactionsWithAcquisitionHistory(sorted);
   }
 
-  const companyEvents = await fetchCompanyEvents(ticker).catch((err) => {
-    console.warn(`[tickerDetail] Company-Events für ${ticker} konnten nicht geladen werden:`, err);
-    return [];
-  });
-
-  let institutionalEvents: InstitutionalEvent[] = [];
-  try {
-    institutionalEvents = await getInstitutionalTimelineEvents(ticker);
-  } catch (err) {
-    console.warn(`[tickerDetail] Institutionelle Aktivität für ${ticker} konnte nicht geladen werden:`, err);
-  }
-
-  const industries = await getTickerIndustries();
   const industry = industries.get(ticker) ?? null;
 
   const currentWindowStart = new Date(Date.now() - CURRENT_WINDOW_DAYS * 24 * 60 * 60 * 1000)
@@ -257,6 +275,7 @@ export async function getTickerDetail(ticker: string): Promise<TickerDetail> {
     transactions: sorted,
     companyEvents,
     institutionalEvents,
+    institutionalConsensus,
     signalScore: currentSignal?.signalScore ?? null,
     leadSide: currentSignal?.leadSide ?? null,
     leadCount: currentSignal?.leadCount ?? 0,
