@@ -24,6 +24,72 @@ export function pctOfPriorHoldings(
 // 14 days matches the dashboard's own default windowDays as a reasonable "same-ish news cycle" scale.
 const CLUSTER_TIGHTNESS_REFERENCE_DAYS = 14;
 
+/** The four 0..1 ratios the Signal Score blends — see the /methodik page for what each one means. */
+export type ScoreComponents = {
+  convictionRatio: number;
+  dollarWeightedRatio: number;
+  avgHoldingsPct: number;
+  clusterTightnessRatio: number;
+};
+
+export const SCORE_COMPONENT_KEYS = [
+  "convictionRatio",
+  "dollarWeightedRatio",
+  "avgHoldingsPct",
+  "clusterTightnessRatio",
+] as const satisfies readonly (keyof ScoreComponents)[];
+
+/**
+ * Relative weight of each component plus the buy/sell asymmetry. Only DEFAULT_SCORE_WEIGHTS is
+ * ever used by the app itself — the parameter exists so the offline research harness
+ * (src/lib/research/, never imported by any route) can re-score the same historical signals under
+ * alternative weightings and measure which components actually predict forward returns. Changing
+ * the live score means changing DEFAULT_SCORE_WEIGHTS here, not passing weights from a route.
+ */
+export type ScoreWeights = ScoreComponents & {
+  buyMultiplier: number;
+  sellMultiplier: number;
+};
+
+export const DEFAULT_SCORE_WEIGHTS: ScoreWeights = {
+  convictionRatio: 1,
+  dollarWeightedRatio: 1,
+  avgHoldingsPct: 1,
+  clusterTightnessRatio: 1,
+  // Insider BUYING is historically a much stronger, more voluntary signal than SELLING (which is
+  // routinely driven by diversification, taxes, or RSU vesting rather than conviction) — so a
+  // BUY-led consensus is boosted and a SELL-led one discounted, on top of the same component
+  // blend used for both.
+  buyMultiplier: 1.15,
+  sellMultiplier: 0.85,
+};
+
+export function sideMultiplierFor(side: TransactionSide, weights: ScoreWeights = DEFAULT_SCORE_WEIGHTS): number {
+  return side === "BUY" ? weights.buyMultiplier : weights.sellMultiplier;
+}
+
+/**
+ * The Signal Score formula itself, isolated from how the components are derived: a weighted mean
+ * of the four 0..1 ratios, scaled to 0..100, tilted by the side multiplier, then signed so the
+ * number alone conveys direction — a sell-led consensus is NEGATIVE (down to -100), a buy-led one
+ * positive. With DEFAULT_SCORE_WEIGHTS the weighted mean is a plain average of the four.
+ */
+export function scoreFromComponents(
+  components: ScoreComponents,
+  side: TransactionSide,
+  weights: ScoreWeights = DEFAULT_SCORE_WEIGHTS
+): number {
+  const totalWeight = SCORE_COMPONENT_KEYS.reduce((sum, key) => sum + weights[key], 0);
+  if (totalWeight <= 0) return 0; // an all-zero weighting has no opinion; don't divide by zero
+  const weightedMean =
+    SCORE_COMPONENT_KEYS.reduce((sum, key) => sum + weights[key] * components[key], 0) / totalWeight;
+
+  const magnitude = Math.round(
+    Math.min(100, Math.max(0, 100 * weightedMean * sideMultiplierFor(side, weights)))
+  );
+  return side === "SELL" ? -magnitude : magnitude;
+}
+
 type MutableTickerSide = {
   side: TransactionSide;
   filersById: Map<string, TickerSide["filers"][number]>;
@@ -137,19 +203,14 @@ export function summarizeTickers(tickers: Map<string, MutableTicker>): TickerSig
           )
         : 1;
 
-    // Insider BUYING is historically a much stronger, more voluntary signal than SELLING (which
-    // is routinely driven by diversification, taxes, or RSU vesting rather than conviction) — so
-    // a BUY-led consensus is boosted and a SELL-led one is discounted, on top of the same
-    // headcount/dollar/holdings-%/tightness blend used for both.
-    const rawScore =
-      100 * ((convictionRatio + dollarWeightedRatio + avgHoldingsPct + clusterTightnessRatio) / 4);
-    const sideMultiplier = leading.side === "BUY" ? 1.15 : 0.85;
-    const magnitude = Math.round(Math.min(100, Math.max(0, rawScore * sideMultiplier)));
-    // Signed so the number alone conveys direction — a sell-led consensus is a NEGATIVE score
-    // (down to -100), a buy-led one positive (up to +100). Before this, both directions rendered
-    // as the same 0-100 positive number and only the (easy to miss) leadSide label distinguished
-    // a strong sell from a strong buy.
-    const signalScore = leading.side === "SELL" ? -magnitude : magnitude;
+    const components: ScoreComponents = {
+      convictionRatio,
+      dollarWeightedRatio,
+      avgHoldingsPct,
+      clusterTightnessRatio,
+    };
+    const sideMultiplier = sideMultiplierFor(leading.side);
+    const signalScore = scoreFromComponents(components, leading.side);
 
     // "Since" the consensus started forming: earliest filing among the leading side's filers.
     const consensusSince = leading.filers.reduce<string | null>(
@@ -165,10 +226,7 @@ export function summarizeTickers(tickers: Map<string, MutableTicker>): TickerSig
       totalParticipants: uniqueFilers.size,
       leadCount: leading.filers.length,
       leadSide: leading.side,
-      convictionRatio,
-      dollarWeightedRatio,
-      avgHoldingsPct,
-      clusterTightnessRatio,
+      ...components,
       sideMultiplier,
       totalValueAll,
       observedTopN: uniqueFilers.size,

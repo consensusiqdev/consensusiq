@@ -3,11 +3,12 @@ import Link from "next/link";
 import TopBar from "@/components/Layout/TopBar";
 import CompanyInsidersClient from "@/components/company/CompanyInsidersClient";
 import CompanyHistoryButton from "@/components/company/CompanyHistoryButton";
+import InstitutionalPanel from "@/components/company/InstitutionalPanel";
 import Badge from "@/components/ui/Badge";
-import CrossSignalBadge from "@/components/ui/CrossSignalBadge";
+import ScoreBadge from "@/components/ui/ScoreBadge";
 import Sparkline from "@/components/ui/Sparkline";
 import EventItem from "@/components/dashboard/EventItem";
-import { getTickerDetail } from "@/lib/tickerDetail";
+import { CURRENT_WINDOW_DAYS, getTickerDetail } from "@/lib/tickerDetail";
 import { slugifyIndustry } from "@/lib/sectors";
 import { fmtSignalScore, fmtUsd, scoreTierClass } from "@/lib/format";
 import { pageMetadata, SITE_URL } from "@/lib/seo";
@@ -71,7 +72,6 @@ export default async function CompanyPage({ params }: { params: Promise<{ ticker
               <Badge variant="accent">{detail.industry}</Badge>
             </Link>
           )}
-          <CrossSignalBadge events={detail.institutionalEvents} />
           <CompanyHistoryButton ticker={ticker} />
           <Link
             href={`/compare?a=${ticker}`}
@@ -100,11 +100,22 @@ export default async function CompanyPage({ params }: { params: Promise<{ ticker
                   <b className="text-text">{detail.leadCount}</b> Insider auf der{" "}
                   <b className="text-text">{detail.leadSide === "BUY" ? "Kauf" : "Verkauf"}</b>-Seite —
                   Signal Score{" "}
-                  <span
-                    className={`inline-flex items-center rounded-md border px-1.5 py-0.5 font-mono font-bold ${scoreTierClass(detail.signalScore)}`}
-                  >
-                    {fmtSignalScore(detail.signalScore)}
-                  </span>
+                  {detail.scoreComponents && detail.scoreSideMultiplier != null && detail.leadSide ? (
+                    // Tap/click opens the same breakdown the dashboard card has always offered.
+                    <ScoreBadge
+                      score={detail.signalScore}
+                      components={detail.scoreComponents}
+                      sideMultiplier={detail.scoreSideMultiplier}
+                      leadSide={detail.leadSide}
+                      layout="inline"
+                    />
+                  ) : (
+                    <span
+                      className={`inline-flex items-center rounded-md border px-1.5 py-0.5 font-mono font-bold ${scoreTierClass(detail.signalScore)}`}
+                    >
+                      {fmtSignalScore(detail.signalScore)}
+                    </span>
+                  )}
                   .
                 </p>
               ) : (
@@ -152,6 +163,17 @@ export default async function CompanyPage({ params }: { params: Promise<{ ticker
             </div>
           )}
         </div>
+
+        {/* Directly below the insider score on purpose: this is where a visitor arriving from
+            /institutional's Smart-Money-Konsens list needs to see how the fund side relates to the
+            insider number they just read, rather than finding a badge and clicking it. */}
+        <InstitutionalPanel
+          events={detail.institutionalEvents}
+          consensus={detail.institutionalConsensus}
+          insiderScore={detail.signalScore}
+          insiderLeadSide={detail.leadSide}
+          insiderWindowDays={CURRENT_WINDOW_DAYS}
+        />
 
         {detail.companyEvents.length > 0 && (
           <div className="mt-6 rounded-xl border border-border bg-bg-panel p-5">
