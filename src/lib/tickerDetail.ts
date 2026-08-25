@@ -3,7 +3,13 @@ import { getTickerHistory, getTickerIndustries } from "@/lib/db";
 import { getInstitutionalConsensusForTicker, getInstitutionalTimelineEvents } from "@/lib/institutional";
 import { enrichTransactionsWithAcquisitionHistory } from "@/lib/premium";
 import { fetchCompanyEvents } from "@/lib/secEdgar";
-import { buildTickerMap, computeSignalHistory, summarizeTickers, type SignalHistoryPoint } from "@/lib/consensus";
+import {
+  buildTickerMap,
+  computeSignalHistory,
+  summarizeTickers,
+  type ScoreComponents,
+  type SignalHistoryPoint,
+} from "@/lib/consensus";
 import { getSectorOverview } from "@/lib/sectors";
 import { getFilteredSignals } from "@/lib/signalsQuery";
 import { getActiveSubscriberId } from "@/lib/subscription";
@@ -39,6 +45,11 @@ export type TickerDetail = {
   signalScore: number | null;
   leadSide: TransactionSide | null;
   leadCount: number;
+  // The four ratios `signalScore` was built from, so the score can be tapped open into its own
+  // breakdown here too — the dashboard card has always offered that, the company page could not,
+  // because these never left computeConsensus(). null whenever there is no active signal.
+  scoreComponents: ScoreComponents | null;
+  scoreSideMultiplier: number | null;
   signalHistory: SignalHistoryPoint[];
   peers: TickerSignal[];
   // Where this ticker's current score ranks among every OTHER ticker with an active signal right
@@ -279,6 +290,15 @@ export async function getTickerDetail(ticker: string): Promise<TickerDetail> {
     signalScore: currentSignal?.signalScore ?? null,
     leadSide: currentSignal?.leadSide ?? null,
     leadCount: currentSignal?.leadCount ?? 0,
+    scoreComponents: currentSignal
+      ? {
+          convictionRatio: currentSignal.convictionRatio,
+          dollarWeightedRatio: currentSignal.dollarWeightedRatio,
+          avgHoldingsPct: currentSignal.avgHoldingsPct,
+          clusterTightnessRatio: currentSignal.clusterTightnessRatio,
+        }
+      : null,
+    scoreSideMultiplier: currentSignal?.sideMultiplier ?? null,
     signalHistory,
     peers,
     scorePercentile,

@@ -5,6 +5,7 @@ import CompanyInsidersClient from "@/components/company/CompanyInsidersClient";
 import CompanyHistoryButton from "@/components/company/CompanyHistoryButton";
 import InstitutionalPanel from "@/components/company/InstitutionalPanel";
 import Badge from "@/components/ui/Badge";
+import ScoreBadge from "@/components/ui/ScoreBadge";
 import Sparkline from "@/components/ui/Sparkline";
 import EventItem from "@/components/dashboard/EventItem";
 import { CURRENT_WINDOW_DAYS, getTickerDetail } from "@/lib/tickerDetail";
@@ -99,11 +100,22 @@ export default async function CompanyPage({ params }: { params: Promise<{ ticker
                   <b className="text-text">{detail.leadCount}</b> Insider auf der{" "}
                   <b className="text-text">{detail.leadSide === "BUY" ? "Kauf" : "Verkauf"}</b>-Seite —
                   Signal Score{" "}
-                  <span
-                    className={`inline-flex items-center rounded-md border px-1.5 py-0.5 font-mono font-bold ${scoreTierClass(detail.signalScore)}`}
-                  >
-                    {fmtSignalScore(detail.signalScore)}
-                  </span>
+                  {detail.scoreComponents && detail.scoreSideMultiplier != null && detail.leadSide ? (
+                    // Tap/click opens the same breakdown the dashboard card has always offered.
+                    <ScoreBadge
+                      score={detail.signalScore}
+                      components={detail.scoreComponents}
+                      sideMultiplier={detail.scoreSideMultiplier}
+                      leadSide={detail.leadSide}
+                      layout="inline"
+                    />
+                  ) : (
+                    <span
+                      className={`inline-flex items-center rounded-md border px-1.5 py-0.5 font-mono font-bold ${scoreTierClass(detail.signalScore)}`}
+                    >
+                      {fmtSignalScore(detail.signalScore)}
+                    </span>
+                  )}
                   .
                 </p>
               ) : (
