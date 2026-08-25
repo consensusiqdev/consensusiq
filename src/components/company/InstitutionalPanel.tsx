@@ -8,7 +8,6 @@ import {
   fmtUsd,
   institutionalChipClass,
   scoreTierClass,
-  summarizeCrossSignal,
 } from "@/lib/format";
 import type { InstitutionalConsensusSignal, InstitutionalEvent, TransactionSide } from "@/types/filing";
 
@@ -41,8 +40,7 @@ export default function InstitutionalPanel({
   insiderLeadSide: TransactionSide | null;
   insiderWindowDays: number;
 }) {
-  const summary = summarizeCrossSignal(events);
-  if (!consensus && !summary) return null;
+  if (!consensus && events.length === 0) return null;
 
   // Newest quarter first; within a quarter the biggest position first.
   const sortedEvents = [...events].sort(
@@ -50,14 +48,26 @@ export default function InstitutionalPanel({
   );
   const latest = sortedEvents[0];
 
-  // Prefer the consensus for the direction — that is the number /institutional ranks by, so it is
-  // what the visitor clicked. Fall back to the raw event mix when funds are active but no
-  // cross-fund consensus exists (a single fund moving, or funds with only one quarter on record).
+  const buyingFunds = sortedEvents.filter((e) => e.changeType === "OPENED" || e.changeType === "INCREASED").length;
+  const sellingFunds = sortedEvents.length - buyingFunds;
+
+  /**
+   * Prefer the consensus score's side — that is what /institutional ranks by, so it is what the
+   * visitor clicked on. Without one, fall back to the plain majority of fund moves rather than
+   * summarizeCrossSignal()'s direction: that helper reports "MIXED" as soon as a single fund sits
+   * on the other side, so a lopsided 4-auf/1-ab would yield no direction and the whole comparison
+   * would silently vanish — on exactly the tickers where it is most worth making. Only a genuine
+   * tie leaves the direction open.
+   */
   const fundDirection = consensus
     ? consensus.leadSide === "ACCUMULATING"
       ? "BUYING"
       : "SELLING"
-    : (summary?.direction ?? null);
+    : buyingFunds > sellingFunds
+      ? "BUYING"
+      : sellingFunds > buyingFunds
+        ? "SELLING"
+        : null;
 
   // Funds the consensus score could actually score (two quarters on record and a changed position)
   // vs. those that only produce a timeline entry. Without naming the difference, the summary line
@@ -162,6 +172,15 @@ export default function InstitutionalPanel({
               · {uncomparedFunds} weitere{uncomparedFunds === 1 ? "r Fonds" : " Fonds"} ohne Vorquartals-Vergleich
             </>
           )}
+        </p>
+      )}
+
+      {/* Same reasoning as the line above: /institutional shows a score for tickers that have one,
+          so its absence here needs a reason, otherwise it reads as missing data. */}
+      {!consensus && (
+        <p className="mt-3 font-mono text-[11px] text-text-faint">
+          Noch kein Smart-Money-Konsens — dafür müssen mindestens zwei Fonds diesen Wert über zwei
+          gemeldete Quartale hinweg im Bestand haben.
         </p>
       )}
 
