@@ -357,7 +357,11 @@ export async function computeInstitutionalConsensus(limit = 20): Promise<Institu
   const quarters = await getRecentGlobalQuarters(CONSENSUS_WINDOW_QUARTERS);
   if (quarters.length < 2) return []; // no rolling comparison possible yet
 
-  const [holdings, fundTotals] = await Promise.all([getHoldingsForQuarters(quarters), getFundTotalsForQuarters(quarters)]);
+  const [holdings, fundTotals, fundLatestQuarters] = await Promise.all([
+    getHoldingsForQuarters(quarters),
+    getFundTotalsForQuarters(quarters),
+    getFundLatestQuarters(),
+  ]);
 
   // ticker -> fund_cik -> quarter -> value_usd
   const byTicker = new Map<string, Map<string, Map<string, number>>>();
@@ -390,7 +394,8 @@ export async function computeInstitutionalConsensus(limit = 20): Promise<Institu
       byFund,
       sortedQuarters,
       fundTotals,
-      fundNameByCik
+      fundNameByCik,
+      fundLatestQuarters
     );
     if (signal) signals.push(signal);
   }
@@ -410,6 +415,13 @@ export async function computeInstitutionalConsensus(limit = 20): Promise<Institu
  * `byFund` maps fund CIK -> quarter -> position value. Returns null when fewer than
  * MIN_ACTIVE_FUNDS funds have a measurable trend — one fund moving alone is a decision, not a
  * consensus.
+ *
+ * `fundLatestQuarters` (fund CIK -> most recent quarter that fund has ANY 13F on record for, any
+ * ticker) is what makes a full exit visible. `institutional_holdings` only ever has a row for a
+ * quarter a fund actually held the position — a fund that sells out entirely leaves no row at all
+ * for the next quarter, not a row with value 0. Without this, such a fund has a single data point
+ * in the window, fails the "≥2 quarters" check below, and drops out of the trend calculation
+ * completely — the single strongest possible sell signal (going to zero) would count for nothing.
  */
 function consensusFromFundTrends(
   ticker: string,
@@ -417,22 +429,33 @@ function consensusFromFundTrends(
   byFund: Map<string, Map<string, number>>,
   sortedQuarters: string[],
   fundTotals: Map<string, number>,
-  fundNameByCik: Map<string, string>
+  fundNameByCik: Map<string, string>,
+  fundLatestQuarters: Map<string, string>
 ): InstitutionalConsensusSignal | null {
   const trends: FundTickerTrend[] = [];
 
   for (const [fundCik, byQuarter] of byFund) {
     const quartersPresent = sortedQuarters.filter((q) => byQuarter.has(q));
-    if (quartersPresent.length < 2) continue; // only one data point — no trend to measure
+    if (quartersPresent.length === 0) continue; // no data point in the window at all
+
+    const lastPresentQuarter = quartersPresent[quartersPresent.length - 1];
+    // Detected the same way getInstitutionalTimelineEvents()'s CLOSED events are: the fund has
+    // since filed a 13F (for other tickers) more recent than the last one where this ticker still
+    // showed up — string comparison works, "YYYY-QN" sorts chronologically.
+    const fundLatestQuarter = fundLatestQuarters.get(fundCik);
+    const isClosed = fundLatestQuarter !== undefined && fundLatestQuarter > lastPresentQuarter;
+
+    if (quartersPresent.length < 2 && !isClosed) continue; // one data point, no known close either
 
     const firstQ = quartersPresent[0];
-    const lastQ = quartersPresent[quartersPresent.length - 1];
     const start = byQuarter.get(firstQ)!;
-    const end = byQuarter.get(lastQ)!;
+    // A closed position ends at 0 regardless of whether a later window quarter has a row for it —
+    // there is no later row, that IS the close.
+    const end = isClosed ? 0 : byQuarter.get(lastPresentQuarter)!;
     if (start === end) continue; // unchanged — not part of a "move"
 
     const startTotal = fundTotals.get(`${fundCik}:${firstQ}`) ?? 0;
-    const endTotal = fundTotals.get(`${fundCik}:${lastQ}`) ?? 0;
+    const endTotal = isClosed ? 0 : (fundTotals.get(`${fundCik}:${lastPresentQuarter}`) ?? 0);
     trends.push({
       fundCik,
       fundName: fundNameByCik.get(fundCik) ?? fundCik,
@@ -505,7 +528,11 @@ export async function getInstitutionalConsensusForTicker(
   const quarters = await getRecentGlobalQuarters(CONSENSUS_WINDOW_QUARTERS);
   if (quarters.length < 2) return null; // no rolling comparison possible yet
 
-  const [rows, fundTotals] = await Promise.all([getInstitutionalActivity(ticker), getFundTotalsForQuarters(quarters)]);
+  const [rows, fundTotals, fundLatestQuarters] = await Promise.all([
+    getInstitutionalActivity(ticker),
+    getFundTotalsForQuarters(quarters),
+    getFundLatestQuarters(),
+  ]);
 
   const inWindow = new Set(quarters);
   const byFund = new Map<string, Map<string, number>>();
@@ -527,5 +554,13 @@ export async function getInstitutionalConsensusForTicker(
     byQuarter.set(row.quarter, (byQuarter.get(row.quarter) ?? 0) + (row.value_usd ?? 0));
   }
 
-  return consensusFromFundTrends(ticker, companyName, byFund, [...quarters].sort(), fundTotals, fundNameByCik);
+  return consensusFromFundTrends(
+    ticker,
+    companyName,
+    byFund,
+    [...quarters].sort(),
+    fundTotals,
+    fundNameByCik,
+    fundLatestQuarters
+  );
 }
