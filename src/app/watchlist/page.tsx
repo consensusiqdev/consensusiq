@@ -14,6 +14,10 @@ export const metadata: Metadata = pageMetadata({
   path: "/watchlist",
 });
 
+// Needs the visitor's live Clerk session on every request to decide which variant to show — can
+// never produce a static shell, so opt out of instant-shell validation.
+export const instant = false;
+
 export default async function WatchlistPage() {
   // Unlike before, non-subscribers no longer get redirected away — they see a free,
   // localStorage-backed watchlist (capped at 5, see localWatchlist.ts) instead.

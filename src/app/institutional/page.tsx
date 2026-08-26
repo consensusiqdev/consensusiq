@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cacheLife } from "next/cache";
 import TopBar from "@/components/Layout/TopBar";
 import Badge from "@/components/ui/Badge";
 import FundHoldingsList from "@/components/institutional/FundHoldingsList";
@@ -15,9 +16,10 @@ export const metadata: Metadata = pageMetadata({
   path: "/institutional",
 });
 
-export const revalidate = 3600; // 13F only refreshes 1x/24h server-side, no reason to compute this more often
-
 export default async function InstitutionalPage() {
+  "use cache";
+  cacheLife("dailyRefresh"); // 13F only refreshes 1x/24h server-side, no reason to compute this more often
+
   const [funds, moves, consensus] = await Promise.all([
     getInstitutionalOverview(),
     getBiggestInstitutionalMoves(),

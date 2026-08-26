@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cacheLife } from "next/cache";
 import TopBar from "@/components/Layout/TopBar";
 import { listIndustriesWithCounts } from "@/lib/sectors";
 import { pageMetadata } from "@/lib/seo";
-
-export const revalidate = 1800;
 
 export const metadata: Metadata = pageMetadata({
   title: "Branchen — Insider-Signale nach Sektor | InsiderAlign",
@@ -14,6 +13,9 @@ export const metadata: Metadata = pageMetadata({
 });
 
 export default async function SectorHubPage() {
+  "use cache";
+  cacheLife("publicIsr");
+
   const industries = await listIndustriesWithCounts();
 
   return (

@@ -3,7 +3,6 @@ import { getTickerSummary } from "@/lib/tickerDetail";
 
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
-export const revalidate = 1800; // matches the page's own ISR window — link-preview crawlers refetch this often
 
 function scoreColor(score: number): string {
   const abs = Math.abs(score);

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cacheLife } from "next/cache";
 import TopBar from "@/components/Layout/TopBar";
 import { getTrackedCompanyCount } from "@/lib/db";
 import { getExchangeListedCompanyCount } from "@/lib/secEdgar";
@@ -10,10 +11,11 @@ export const metadata: Metadata = {
     "Wie InsiderAlign den Signal Score berechnet, welche Daten einfließen und die gesetzlichen Pflichtangaben nach Art. 20 EU-Marktmissbrauchsverordnung.",
 };
 
-// SEC's exchange-ticker list only changes as new listings/delistings happen — daily refresh is plenty.
-export const revalidate = 3600;
-
 export default async function MethodikPage() {
+  "use cache";
+  // SEC's exchange-ticker list only changes as new listings/delistings happen — daily refresh is plenty.
+  cacheLife("dailyRefresh");
+
   const [trackedCompanyCount, exchangeListedCompanyCount] = await Promise.all([
     getTrackedCompanyCount(),
     getExchangeListedCompanyCount(),

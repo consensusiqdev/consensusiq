@@ -12,8 +12,12 @@ import { CURRENT_WINDOW_DAYS, getTickerDetail } from "@/lib/tickerDetail";
 import { slugifyIndustry } from "@/lib/sectors";
 import { fmtSignalScore, fmtUsd, scoreTierClass } from "@/lib/format";
 import { pageMetadata, SITE_URL } from "@/lib/seo";
+import { getActiveSubscriberId } from "@/lib/subscription";
 
-export const revalidate = 1800; // public/SEO page — 30min ISR keeps crawler load off the DB without going stale
+// This page (and its metadata) reads the visitor's Clerk session before it can decide whether to
+// include the premium enrichment, so it can never produce a static shell — the actual caching
+// (matching the old 30min ISR window) now lives on getTickerDetail's 'use cache' scope.
+export const instant = false;
 
 export async function generateMetadata({
   params,
@@ -22,7 +26,8 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { ticker: rawTicker } = await params;
   const ticker = rawTicker.toUpperCase();
-  const detail = await getTickerDetail(ticker);
+  const isSubscriber = Boolean(await getActiveSubscriberId());
+  const detail = await getTickerDetail(ticker, isSubscriber);
 
   const scoreText =
     detail.signalScore != null ? `Signal Score ${fmtSignalScore(detail.signalScore)}` : "noch kein aktives Signal";
@@ -36,7 +41,8 @@ export async function generateMetadata({
 export default async function CompanyPage({ params }: { params: Promise<{ ticker: string }> }) {
   const { ticker: rawTicker } = await params;
   const ticker = rawTicker.toUpperCase();
-  const detail = await getTickerDetail(ticker);
+  const isSubscriber = Boolean(await getActiveSubscriberId());
+  const detail = await getTickerDetail(ticker, isSubscriber);
 
   const breadcrumbJsonLd = {
     "@context": "https://schema.org",

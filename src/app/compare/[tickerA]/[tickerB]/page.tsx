@@ -9,7 +9,12 @@ import { slugifyIndustry } from "@/lib/sectors";
 import { fmtUsd, fmtDate, fmtSignalScore, scoreTierClass, sideChipClass } from "@/lib/format";
 import { pageMetadata, SITE_URL } from "@/lib/seo";
 
-export const revalidate = 1800; // same ISR window as /company/[ticker] — public page, keeps crawler/refresh load off the DB
+// No generateStaticParams exists for this route (every ticker pair is served on demand), so the
+// params are never known ahead of a visit — awaiting them at the top of the page body blocks the
+// App Shell. Getting an instant shell here would mean pushing that into a Suspense boundary; until
+// that's worth doing, opt out of the check the same way the migration guide's incremental-adoption
+// flow recommends. The actual data caching still lives on getTickerComparisonData's 'use cache' scope.
+export const instant = false;
 
 export async function generateMetadata({
   params,
