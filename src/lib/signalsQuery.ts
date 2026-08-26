@@ -1,6 +1,13 @@
 import "server-only";
 import { getTickerIndustries, getTotalInsiderPositionsCount, getTransactionsSince } from "@/lib/db";
-import { computeConsensus, filterAndSortConsensus, summarizeFilers, topBuyTransactions, type SortOption } from "@/lib/consensus";
+import {
+  computeConsensus,
+  filterAndSortConsensus,
+  isIndependentDecision,
+  summarizeFilers,
+  topBuyTransactions,
+  type SortOption,
+} from "@/lib/consensus";
 import { enrichSignalsWithAcquisitionHistory } from "@/lib/premium";
 import { getActiveSubscriberId } from "@/lib/subscription";
 import type { FilerSummary, Transaction, TickerSignal } from "@/types/filing";
@@ -66,9 +73,7 @@ export async function getFilteredSignals(query: SignalsQueryParams): Promise<Tic
     isFreshInsider: r.is_fresh_insider === 1,
   }));
 
-  const openMarketOnly = allTransactions.filter(
-    (t) => (t.transactionCode === "P" || t.transactionCode === "S") && !t.nearOffering && !t.isPlanTrade
-  );
+  const openMarketOnly = allTransactions.filter(isIndependentDecision);
   const currentOpenMarket = openMarketOnly.filter((t) => t.filedDate >= windowStart);
   const sided = query.buysOnly ? currentOpenMarket.filter((t) => t.side === "BUY") : currentOpenMarket;
   const transactions = query.cSuiteOnly ? sided.filter((t) => t.isCSuite) : sided;
@@ -136,9 +141,7 @@ export async function getDashboardInitialData(query: SignalsQueryParams): Promis
     isFreshInsider: r.is_fresh_insider === 1,
   }));
 
-  const openMarketOnly = allTransactions.filter(
-    (t) => (t.transactionCode === "P" || t.transactionCode === "S") && !t.nearOffering && !t.isPlanTrade
-  );
+  const openMarketOnly = allTransactions.filter(isIndependentDecision);
   const currentOpenMarket = openMarketOnly.filter((t) => t.filedDate >= windowStart);
   const thisMonthOpenMarket = openMarketOnly.filter((t) => t.filedDate >= currentMonthStart);
   const lastMonthOpenMarket = openMarketOnly.filter(

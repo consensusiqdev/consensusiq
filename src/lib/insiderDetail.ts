@@ -1,4 +1,5 @@
 import "server-only";
+import { isIndependentDecision } from "@/lib/consensus";
 import { getFilerTransactionHistory, getTickerHistory } from "@/lib/db";
 import type { FilerType, Transaction, TransactionSide } from "@/types/filing";
 
@@ -110,27 +111,23 @@ export async function getInsiderDetail(ticker: string, filerId: string): Promise
       isCSuite: r.is_c_suite === 1,
       isFreshInsider: r.is_fresh_insider === 1,
     };
-    const isOpenMarket = (base.transactionCode === "P" || base.transactionCode === "S") && !base.nearOffering && !base.isPlanTrade;
-    return { ...base, clusterParticipants: isOpenMarket ? clusterParticipantsFor(base.side, base.filedDate) : 1, sizeMultiple: null };
+    return {
+      ...base,
+      clusterParticipants: isIndependentDecision(base) ? clusterParticipantsFor(base.side, base.filedDate) : 1,
+      sizeMultiple: null,
+    };
   });
 
   // Leave-one-out average: for each open-market trade, compare against the average of this
   // insider's OTHER open-market trades at this company (not including itself) — computed once
   // from the running total/count rather than per-trade, since (sum - x)/(count - 1) is equivalent
   // and avoids an O(n²) pass.
-  const openMarketWithValue = transactionsAsc.filter(
-    (t) =>
-      (t.transactionCode === "P" || t.transactionCode === "S") &&
-      !t.nearOffering &&
-      !t.isPlanTrade &&
-      t.valueUsd != null
-  );
+  const openMarketWithValue = transactionsAsc.filter((t) => isIndependentDecision(t) && t.valueUsd != null);
   const totalValue = openMarketWithValue.reduce((sum, t) => sum + (t.valueUsd ?? 0), 0);
   const valuedCount = openMarketWithValue.length;
   for (const t of transactionsAsc) {
     if (t.valueUsd == null || valuedCount < 2) continue;
-    const isOpenMarket = (t.transactionCode === "P" || t.transactionCode === "S") && !t.nearOffering && !t.isPlanTrade;
-    if (!isOpenMarket) continue;
+    if (!isIndependentDecision(t)) continue;
     const othersAvg = (totalValue - t.valueUsd) / (valuedCount - 1);
     t.sizeMultiple = othersAvg > 0 ? t.valueUsd / othersAvg : null;
   }
@@ -151,9 +148,7 @@ export async function getInsiderDetail(ticker: string, filerId: string): Promise
     prevShares = t.sharesOwnedAfter;
   }
 
-  const ownOpenMarket = transactionsAsc.filter(
-    (t) => (t.transactionCode === "P" || t.transactionCode === "S") && !t.nearOffering && !t.isPlanTrade
-  );
+  const ownOpenMarket = transactionsAsc.filter(isIndependentDecision);
   const trackRecord: TrackRecord = {
     totalBuys: ownOpenMarket.filter((t) => t.side === "BUY").length,
     totalSells: ownOpenMarket.filter((t) => t.side === "SELL").length,

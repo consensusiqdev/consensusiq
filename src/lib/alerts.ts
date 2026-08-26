@@ -1,5 +1,6 @@
 import "server-only";
 import { clerkClient } from "@clerk/nextjs/server";
+import { isIndependentDecision } from "@/lib/consensus";
 import { getSubscriptionStatus, getWatchersForTicker } from "@/lib/db";
 import { sendWatchlistAlertEmail } from "@/lib/email";
 import { sendPushToUsers } from "@/lib/push";
@@ -22,10 +23,18 @@ function pushPayloadFor(transactions: Transaction[]) {
  * one consolidated alert per user per run (not one email per transaction). Only currently-active
  * subscribers are notified — a lapsed subscriber's old watchlist rows stay in the DB but stop
  * triggering emails, so the alert feature stays tied to the paid subscription over time.
+ *
+ * Alerts on the same set of trades the Signal Score is built from, nothing wider: the caller hands
+ * over EVERY newly ingested transaction, which includes RSU grants, option exercises and tax
+ * withholdings. Those had been going out as alerts — a routine vesting grant arriving as the same
+ * email and push as a real conviction buy, on a product that says everywhere else that they are
+ * not trading decisions. Digests and saved screens always filtered correctly (both run through
+ * getFilteredSignals); this path was the one that did not.
  */
 export async function sendWatchlistAlerts(
-  newTransactions: Transaction[]
+  allNewTransactions: Transaction[]
 ): Promise<{ emailsSent: number; pushSent: number }> {
+  const newTransactions = allNewTransactions.filter(isIndependentDecision);
   if (newTransactions.length === 0) return { emailsSent: 0, pushSent: 0 };
 
   // Fetch watchers per distinct ticker, then check subscription status per distinct user once —

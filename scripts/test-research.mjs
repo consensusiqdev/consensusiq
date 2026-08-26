@@ -9,7 +9,14 @@
 // Fehlerfall mit HTTP 200, ein stiller Fehlgriff landet als Lücke in der Stichprobe.
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { DEFAULT_SCORE_WEIGHTS, SCORE_COMPONENT_KEYS, scoreFromComponents, sideMultiplierFor } from "../src/lib/consensus.ts";
+import {
+  DEFAULT_SCORE_WEIGHTS,
+  SCORE_COMPONENT_KEYS,
+  isIndependentDecision,
+  isOpenMarketTrade,
+  scoreFromComponents,
+  sideMultiplierFor,
+} from "../src/lib/consensus.ts";
 import {
   benchmarkReturnBetween, fetchDailyCloses, firstBarAfter, forwardReturn, indexOfDateOnOrBefore,
   parseStooqCsv, parseTiingoJson, resolveProvider, toStooqSymbol,
@@ -23,6 +30,56 @@ const near = (actual, expected, msg) =>
   assert.ok(Math.abs(actual - expected) < 1e-9, `${msg} — war ${actual}, erwartet ${expected}`);
 
 // ---------------------------------------------------------------------------
+
+describe("Welche Trades zählen", () => {
+  const trade = (transactionCode, extra = {}) => ({
+    transactionCode,
+    nearOffering: false,
+    isPlanTrade: false,
+    ...extra,
+  });
+
+  it("erkennt offene Markttrades", () => {
+    assert.ok(isOpenMarketTrade(trade("P")), "Kauf");
+    assert.ok(isOpenMarketTrade(trade("S")), "Verkauf");
+  });
+
+  // Der Kern: Vergütungsereignisse verändern den Aktienbestand, sind aber keine Kauf- oder
+  // Verkaufsentscheidung. Genau diese Unterscheidung hatte der Watchlist-Alert nicht gemacht.
+  it("schließt Vergütungsereignisse aus", () => {
+    for (const code of ["A", "M", "F", "G"]) {
+      assert.equal(isOpenMarketTrade(trade(code)), false, `Code ${code} ist kein Markttrade`);
+      assert.equal(isIndependentDecision(trade(code)), false, `Code ${code} ist keine Entscheidung`);
+    }
+  });
+
+  it("schließt Emissionszeichnungen und Planhandel aus", () => {
+    assert.equal(isIndependentDecision(trade("P", { nearOffering: true })), false, "IPO-Zeichnung");
+    assert.equal(isIndependentDecision(trade("S", { isPlanTrade: true })), false, "10b5-1-Plan");
+    // ... bleiben aber Markttrades, denn die sichtbare Handelshistorie zeigt sie weiterhin an.
+    assert.ok(isOpenMarketTrade(trade("P", { nearOffering: true })), "in der Historie sichtbar");
+    assert.ok(isOpenMarketTrade(trade("S", { isPlanTrade: true })), "in der Historie sichtbar");
+  });
+
+  it("lässt echte Entscheidungen durch", () => {
+    assert.ok(isIndependentDecision(trade("P")));
+    assert.ok(isIndependentDecision(trade("S")));
+  });
+
+  // Als Prädikat direkt an .filter() übergebbar — so wird es an allen Aufrufstellen benutzt,
+  // und ein versehentlich mitgereichter Index darf das Ergebnis nicht verändern.
+  it("funktioniert als filter-Prädikat", () => {
+    const trades = [trade("P"), trade("A"), trade("S"), trade("M"), trade("P", { isPlanTrade: true })];
+    assert.deepEqual(
+      trades.filter(isIndependentDecision).map((t) => t.transactionCode),
+      ["P", "S"]
+    );
+    assert.deepEqual(
+      trades.filter(isOpenMarketTrade).map((t) => t.transactionCode),
+      ["P", "S", "P"]
+    );
+  });
+});
 
 describe("Score-Formel", () => {
   const components = { convictionRatio: 1, dollarWeightedRatio: 0.8, avgHoldingsPct: 0.2, clusterTightnessRatio: 1 };

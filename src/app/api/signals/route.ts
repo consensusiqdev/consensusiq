@@ -3,6 +3,7 @@ import { getTickerIndustries, getTotalInsiderPositionsCount, getTransactionsSinc
 import {
   computeConsensus,
   filterAndSortConsensus,
+  isIndependentDecision,
   summarizeFilers,
   topBuyTransactions,
   type SortOption,
@@ -85,7 +86,7 @@ export async function GET(request: NextRequest) {
     // trades are excluded for the same reason: a Rule 10b5-1(c) plan trade executes automatically
     // on a pre-set schedule, not as a spontaneous decision.
     const openMarketOnly = allTransactions.filter(
-      (t) => (t.transactionCode === "P" || t.transactionCode === "S") && !t.nearOffering && !t.isPlanTrade
+      isIndependentDecision
     );
     const currentOpenMarket = openMarketOnly.filter((t) => t.filedDate >= windowStart);
     const thisMonthOpenMarket = openMarketOnly.filter((t) => t.filedDate >= currentMonthStart);

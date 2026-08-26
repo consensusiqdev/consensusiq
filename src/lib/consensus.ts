@@ -1,5 +1,34 @@
 import type { Transaction, TickerSide, TickerSignal, TransactionSide, FilerSummary } from "@/types/filing";
 
+/** Anything a Form 4 can report that we track — including compensation events. See TransactionCode. */
+type TradeLike = Pick<Transaction, "transactionCode" | "nearOffering" | "isPlanTrade">;
+
+/**
+ * An actual open-market trade (code P or S), as opposed to a compensation event — a grant, an
+ * option exercise, a tax withholding. Those change share counts but are not decisions to buy or
+ * sell, so they belong in a holdings history but never in a trading signal.
+ */
+export function isOpenMarketTrade(t: TradeLike): boolean {
+  return t.transactionCode === "P" || t.transactionCode === "S";
+}
+
+/**
+ * An open-market trade that also reflects an INDEPENDENT decision — the bar the Signal Score, the
+ * alerts and the digests all measure against. On top of isOpenMarketTrade() this drops:
+ *
+ * - `nearOffering`: buying into an IPO/follow-on is a coordinated allocation, not conviction.
+ * - `isPlanTrade`: a Rule 10b5-1(c) plan trade was scheduled months earlier, so it says nothing
+ *   about what the insider thinks today.
+ *
+ * Lives here, next to the score it feeds, because this predicate had been copy-pasted into five
+ * different modules — and the one path that forgot a clause (watchlist alerts, which notified on
+ * routine RSU grants as if they were conviction buys) went unnoticed precisely because there was
+ * no single definition for it to visibly diverge from.
+ */
+export function isIndependentDecision(t: TradeLike): boolean {
+  return isOpenMarketTrade(t) && !t.nearOffering && !t.isPlanTrade;
+}
+
 /**
  * What share of a filer's PRIOR holdings a trade represents — e.g. selling 5 of 100 shares is a
  * very different signal than selling 95 of 100, even at the same headline share count. Derived
