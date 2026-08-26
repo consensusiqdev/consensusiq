@@ -1,4 +1,5 @@
 import "server-only";
+import { cacheLife } from "next/cache";
 import { getTickerHistory, getTickerIndustries } from "@/lib/db";
 import { getInstitutionalConsensusForTicker, getInstitutionalTimelineEvents } from "@/lib/institutional";
 import { enrichTransactionsWithAcquisitionHistory } from "@/lib/premium";
@@ -14,7 +15,6 @@ import {
 } from "@/lib/consensus";
 import { getSectorOverview } from "@/lib/sectors";
 import { getFilteredSignals } from "@/lib/signalsQuery";
-import { getActiveSubscriberId } from "@/lib/subscription";
 import type {
   CompanyEvent,
   InstitutionalConsensusSignal,
@@ -102,6 +102,9 @@ export type TickerSummary = {
  * institutional-timeline calls or premium enrichment. Used by the opengraph-image route, which
  * gets re-fetched by link-preview crawlers and shouldn't pay for the full detail computation. */
 export async function getTickerSummary(ticker: string): Promise<TickerSummary> {
+  "use cache";
+  cacheLife("publicIsr");
+
   const [rows, industries] = await Promise.all([getTickerHistory(ticker), getTickerIndustries()]);
   const transactions = mapRowsToTransactions(ticker, rows);
   const companyName = transactions[transactions.length - 1]?.companyName ?? ticker;
@@ -144,6 +147,9 @@ const RECENT_TRANSACTIONS_LIMIT = 5;
  * live SEC EDGAR company-events/institutional-timeline calls and premium enrichment, none of which
  * the comparison view needs. */
 export async function getTickerComparisonData(ticker: string): Promise<TickerComparisonData> {
+  "use cache";
+  cacheLife("publicIsr");
+
   const [rows, industries] = await Promise.all([getTickerHistory(ticker), getTickerIndustries()]);
   const allTransactions = mapRowsToTransactions(ticker, rows);
   const transactions = allTransactions.filter(isOpenMarketTrade);
@@ -183,8 +189,16 @@ export async function getTickerComparisonData(ticker: string): Promise<TickerCom
  * Everything needed for a ticker's detail view — both the dashboard's modal (via
  * api/ticker-detail/route.ts, a thin wrapper around this) and the public /company/[ticker] page
  * call this directly, so the two never drift out of sync.
+ *
+ * Cached (Cache Components): `isSubscriber` is read from the Clerk session by the caller, outside
+ * this cached scope, and passed in as a plain argument — cached functions can't call auth()/read
+ * cookies themselves. This gives subscribers and anonymous visitors separate cache entries, so the
+ * premium enrichment never leaks between them.
  */
-export async function getTickerDetail(ticker: string): Promise<TickerDetail> {
+export async function getTickerDetail(ticker: string, isSubscriber: boolean): Promise<TickerDetail> {
+  "use cache";
+  cacheLife("publicIsr");
+
   // These five don't depend on each other, and fetchCompanyEvents() in particular is a live SEC
   // EDGAR round trip behind a 120ms throttle — awaited one after another (as this used to be) the
   // page waited for their sum instead of their max, which is most of why it felt slow.
@@ -223,7 +237,7 @@ export async function getTickerDetail(ticker: string): Promise<TickerDetail> {
   // Newest first for the detail view (getTickerHistory orders oldest-first for chart-style use).
   const sorted = [...transactions].sort((a, b) => (a.transactionDate < b.transactionDate ? 1 : -1));
 
-  if (await getActiveSubscriberId()) {
+  if (isSubscriber) {
     await enrichTransactionsWithAcquisitionHistory(sorted);
   }
 

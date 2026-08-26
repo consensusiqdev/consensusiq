@@ -7,7 +7,12 @@ import Sparkline from "@/components/ui/Sparkline";
 import { getSectorOverview, getSectorSignalHistory, resolveIndustryFromSlug, summarizeIndustryTrend } from "@/lib/sectors";
 import { pageMetadata, SITE_URL } from "@/lib/seo";
 
-export const revalidate = 1800;
+// No generateStaticParams exists for this route (every slug is served on demand), so the params
+// are never known ahead of a visit — awaiting them at the top of the page body blocks the App
+// Shell. Getting an instant shell here would mean pushing that into a Suspense boundary; until
+// that's worth doing, opt out of the check the same way the migration guide's incremental-adoption
+// flow recommends. The actual data caching still lives on sectors.ts's 'use cache' scopes.
+export const instant = false;
 
 export async function generateMetadata({
   params,

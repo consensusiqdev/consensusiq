@@ -3,13 +3,16 @@ import TopBar from "@/components/Layout/TopBar";
 import DashboardClient from "@/components/dashboard/DashboardClient";
 import { DEFAULT_FILTERS } from "@/components/dashboard/FilterBar";
 import { getDashboardInitialData } from "@/lib/signalsQuery";
+import { getActiveSubscriberId } from "@/lib/subscription";
 
-// New Form-4 filings ingest every 5 min (see cron/ingest) — matches that cadence so the
-// server-rendered initial paint doesn't go stale for long between real data changes.
-export const revalidate = 300;
+// This page reads the visitor's Clerk session before it can decide whether to include the premium
+// enrichment, so it can never produce a static shell — the actual caching (matching the old 5-min
+// ISR window, same cadence as cron/ingest) now lives on getDashboardInitialData's 'use cache' scope.
+export const instant = false;
 
 export default async function DashboardPage() {
-  const initialData = await getDashboardInitialData(DEFAULT_FILTERS);
+  const isSubscriber = Boolean(await getActiveSubscriberId());
+  const initialData = await getDashboardInitialData(DEFAULT_FILTERS, isSubscriber);
 
   return (
     <main className="min-h-screen bg-bg text-text">

@@ -1,4 +1,5 @@
 import "server-only";
+import { cacheLife } from "next/cache";
 import { getTickerIndustries, getTransactionsSince, type TransactionRow } from "@/lib/db";
 import { computeConsensus, computeIndustrySignalHistory, type SignalHistoryPoint } from "@/lib/consensus";
 import type { Transaction, TickerSignal } from "@/types/filing";
@@ -57,6 +58,9 @@ export async function listIndustries(): Promise<{ industry: string; slug: string
 }
 
 export async function resolveIndustryFromSlug(slug: string): Promise<string | null> {
+  "use cache";
+  cacheLife("publicIsr");
+
   const all = await listIndustries();
   return all.find((i) => i.slug === slug)?.industry ?? null;
 }
@@ -81,6 +85,9 @@ export type SectorOverview = {
 
 /** Current signal-score consensus for every ticker in one industry, same recency window as tickerDetail.ts's peers lookup. */
 export async function getSectorOverview(industry: string): Promise<SectorOverview> {
+  "use cache";
+  cacheLife("publicIsr");
+
   const [inIndustry, windowStart] = await Promise.all([
     tickersInIndustry(industry),
     Promise.resolve(new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)),
@@ -111,6 +118,9 @@ export async function getSectorOverview(industry: string): Promise<SectorOvervie
  * one score per real ticker. Needs its own (longer) fetch window than getSectorOverview's 30 days.
  */
 export async function getSectorSignalHistory(industry: string): Promise<SignalHistoryPoint[]> {
+  "use cache";
+  cacheLife("publicIsr");
+
   const [inIndustry, windowStart] = await Promise.all([
     tickersInIndustry(industry),
     Promise.resolve(new Date(Date.now() - TREND_WEEKS * 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)),

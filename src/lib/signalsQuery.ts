@@ -1,4 +1,5 @@
 import "server-only";
+import { cacheLife } from "next/cache";
 import { getTickerIndustries, getTotalInsiderPositionsCount, getTransactionsSince } from "@/lib/db";
 import {
   computeConsensus,
@@ -9,7 +10,6 @@ import {
   type SortOption,
 } from "@/lib/consensus";
 import { enrichSignalsWithAcquisitionHistory } from "@/lib/premium";
-import { getActiveSubscriberId } from "@/lib/subscription";
 import type { FilerSummary, Transaction, TickerSignal } from "@/types/filing";
 
 export const SORT_OPTIONS: SortOption[] = ["consensus", "exposure", "conviction", "score"];
@@ -106,8 +106,19 @@ export type DashboardData = {
  *
  * Deliberately a full duplicate of /api/signals/route.ts's logic rather than a refactor of that
  * route — same reasoning as getFilteredSignals() above: avoid touching a well-exercised endpoint.
+ *
+ * Cached (Cache Components): `isSubscriber` is read from the Clerk session by the caller, outside
+ * this cached scope, and passed in as a plain argument — cached functions can't call auth()/read
+ * cookies themselves. This gives subscribers and anonymous visitors separate cache entries, so the
+ * premium enrichment never leaks between them.
  */
-export async function getDashboardInitialData(query: SignalsQueryParams): Promise<DashboardData> {
+export async function getDashboardInitialData(
+  query: SignalsQueryParams,
+  isSubscriber: boolean
+): Promise<DashboardData> {
+  "use cache";
+  cacheLife("ingestCadence");
+
   const now = new Date();
   const windowStart = new Date(now.getTime() - query.windowDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const currentMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10);
@@ -177,7 +188,7 @@ export async function getDashboardInitialData(query: SignalsQueryParams): Promis
     query.sortBy
   ).reduce((sum, s) => sum + s.totalValueAll, 0);
 
-  if (await getActiveSubscriberId()) {
+  if (isSubscriber) {
     await enrichSignalsWithAcquisitionHistory(signals);
   }
 

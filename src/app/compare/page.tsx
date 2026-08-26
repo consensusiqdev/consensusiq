@@ -11,6 +11,12 @@ export const metadata: Metadata = pageMetadata({
   path: "/compare",
 });
 
+// searchParams are only known at request time and are read directly at the top of this page (no
+// data to cache here, just an initial value passed to the client-side picker), so this can't
+// produce a static shell — opt out the same way the migration guide's incremental-adoption flow
+// recommends rather than restructuring this simple page around a Suspense boundary.
+export const instant = false;
+
 export default async function ComparePage({
   searchParams,
 }: {

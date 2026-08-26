@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { cacheLife } from "next/cache";
 import { SITE_URL } from "@/lib/seo";
 import { getAllTickers } from "@/lib/db";
 import { listIndustries } from "@/lib/sectors";
@@ -17,6 +18,14 @@ const STATIC_ROUTES: { path: string; priority: number; changeFrequency: Metadata
 ];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  // Without this the route falls out of prerendering entirely (it was `○` before Cache Components,
+  // `ƒ` after): both the `new Date()` below and the two uncached DB reads are enough to block a
+  // static shell, so every crawler hit would re-query all tickers and industries. Caching the
+  // whole function keeps it a prerendered file again, refreshed daily like the sitemap's own
+  // `changeFrequency` implies.
+  "use cache";
+  cacheLife("dailyRefresh");
+
   const now = new Date();
 
   const staticEntries: MetadataRoute.Sitemap = STATIC_ROUTES.map((r) => ({
