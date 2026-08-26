@@ -130,10 +130,13 @@ Kurse lassen sich sofort Jahre zurück laden; die Insider-Meldungen sind der Eng
 Historie zu dünn ist, meldet der Bericht das ehrlich, statt Zahlen auszugeben, die nach etwas
 aussehen. Sobald genug Zeit vergangen ist, wird derselbe Aufruf ohne Änderung aussagekräftig.
 
-Wer das beschleunigen will, müsste Form-4-Meldungen historisch nachladen. Der Weg dahin steht als
-konkreter Plan in **[BACKFILL.md](./BACKFILL.md)** — inklusive der Stelle, an der ein naiver
-Nachlauf den Backtest still verfälschen würde (`is_plan_trade` gibt es erst ab 2023). Eigenes
-Vorhaben, bewusst nicht Teil dieses Werkzeugs.
+Dafür gibt es den historischen Form-4-Nachlauf: `scripts/backfill-form4.mjs`, beschrieben in
+**[BACKFILL.md](./BACKFILL.md)**. Einmal `scripts/add-backfilled-column.mjs` einspielen, dann den
+Nachlauf lokal laufen lassen — er ist jederzeit abbrechbar und macht beim Neustart weiter.
+
+Wichtig dabei: nachgeladene Zeilen vor `--trust-flags-from` (Vorgabe `2023-04-01`) lässt der
+Backtest bewusst draußen, weil SECs Planhandel-Kennzeichen davor nicht existierte und der Score
+Planhandel ausschließt. Die Datengrundlage im Bericht weist aus, wie viele Zeilen das betrifft.
 
 ## Optionen
 
@@ -148,6 +151,7 @@ Vorhaben, bewusst nicht Teil dieses Werkzeugs.
 | `--from`, `--to` | offen | Auswertungszeitraum eingrenzen |
 | `--split` | aus | Out-of-Sample-Gegenprobe |
 | `--include-plan-trades` | aus | 10b5-1-Planhandel mitzählen (siehe unten) |
+| `--trust-flags-from` | 2023-04-01 | ab wann nachgeladene Zeilen ausgewertet werden (siehe BACKFILL.md) |
 | `--json` | aus | vollständiger Bericht als JSON |
 
 `--include-plan-trades` ist die einzige Option, die von der Live-Filterung abweicht: Planhandel

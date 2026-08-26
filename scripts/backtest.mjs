@@ -51,7 +51,12 @@ const client = createDbClient();
 
 // --- Daten laden -----------------------------------------------------------
 
+// Die Spalte kommt erst mit scripts/add-backfilled-column.mjs. Ohne sie gibt es auch keine
+// nachgeladenen Zeilen, die der Stichtag aussortieren müsste — also einmal nachsehen statt an
+// einem rohen SQL-Fehler zu scheitern.
+const hasBackfilledColumn = await columnExists("transactions", "backfilled");
 const transactions = await loadTransactions();
+const backfilledExcluded = hasBackfilledColumn ? await countExcludedBackfilled() : 0;
 if (transactions.length === 0) {
   console.error("Keine Transaktionen in der Datenbank. Läuft der Ingest?");
   process.exit(1);
@@ -260,6 +265,7 @@ function buildReport() {
       from: args.from,
       to: args.to,
       includePlanTrades: args.includePlanTrades,
+      trustFlagsFrom: args.trustFlagsFrom,
       benchmark: BENCHMARK_SYMBOL,
       buckets: args.buckets,
     },
@@ -267,6 +273,7 @@ function buildReport() {
       transactions: transactions.length,
       filedRange: [transactions[0]?.filedDate, transactions[transactions.length - 1]?.filedDate],
       tickersWithPrices: priceSeries.size,
+      backfilledExcluded,
       events: events.length,
       ...diagnostics,
     },
@@ -340,6 +347,11 @@ function printReport() {
     `  Parameter            Fenster ${parameters.windowDays}d · min. ${parameters.minAgree} Insider · min. $${parameters.minUsd} · Benchmark ${parameters.benchmark}` +
       (parameters.includePlanTrades ? " · inkl. 10b5-1-Planhandel" : "")
   );
+  if (data.backfilledExcluded > 0) {
+    console.log(
+      `  Nachgeladen ignoriert  ${data.backfilledExcluded} Zeilen vor ${parameters.trustFlagsFrom} (Planhandel-Kennzeichen fehlt dort)`
+    );
+  }
   if (data.missingPriceTickers.length > 0) {
     const preview = data.missingPriceTickers.slice(0, 12).join(", ");
     const rest = data.missingPriceTickers.length > 12 ? ` … (+${data.missingPriceTickers.length - 12})` : "";
@@ -534,19 +546,29 @@ function createDbClient() {
  *
  * `--include-plan-trades` hebt genau eine dieser Regeln auf: Planhandel ist aktuell komplett
  * ausgeschlossen, ohne dass je nachgerechnet wurde, ob er wirklich nichts beiträgt.
+ *
+ * Zusätzlich gilt ein Stichtag für nachgeladene Zeilen (`backfilled = 1`): SECs `aff10b5One` ist
+ * erst seit der Regeländerung 2023 Pflichtfeld, ältere Meldungen kommen also ohne
+ * Planhandel-Kennzeichen an und läsen sich als "kein Planhandel". Da der Score Planhandel
+ * ausschließt, würden solche Zeilen den Backtest auf Signalen rechnen lassen, die die Live-App nie
+ * erzeugt hätte — ohne dass an den Zahlen etwas auffiele. Zeilen aus dem Live-Ingest sind davon
+ * nicht betroffen und bleiben unabhängig vom Stichtag drin. `--trust-flags-from` verschiebt die
+ * Grenze bewusst; siehe src/lib/research/BACKFILL.md.
  */
 async function loadTransactions() {
   const codes = "('P','S')";
   const planClause = args.includePlanTrades ? "" : " AND COALESCE(is_plan_trade, 0) = 0";
-  const result = await client.execute(
-    `SELECT ticker, company_name, filer_id, filer_type, filer_name, filer_role, side, transaction_code,
+  const backfillClause = hasBackfilledColumn ? " AND (COALESCE(backfilled, 0) = 0 OR filed_date >= ?)" : "";
+  const result = await client.execute({
+    sql: `SELECT ticker, company_name, filer_id, filer_type, filer_name, filer_role, side, transaction_code,
             shares, price_per_share, value_usd, shares_owned_after, transaction_date, filed_date, source_url,
             COALESCE(is_c_suite, 0) AS is_c_suite, COALESCE(is_fresh_insider, 0) AS is_fresh_insider
        FROM transactions
       WHERE transaction_code IN ${codes}
-        AND COALESCE(near_offering, 0) = 0${planClause}
-      ORDER BY filed_date ASC`
-  );
+        AND COALESCE(near_offering, 0) = 0${planClause}${backfillClause}
+      ORDER BY filed_date ASC`,
+    args: hasBackfilledColumn ? [args.trustFlagsFrom] : [],
+  });
 
   return result.rows.map((row, index) => ({
     id: `${row.ticker}:${row.filer_id}:${row.transaction_date}:${index}`,
@@ -571,6 +593,22 @@ async function loadTransactions() {
     isCSuite: row.is_c_suite === 1,
     isFreshInsider: row.is_fresh_insider === 1,
   }));
+}
+
+/** Wie viele nachgeladene Zeilen der Stichtag oben aussortiert — nur zur Ausweisung im Bericht,
+ * damit die Lücke sichtbar ist statt still zu wirken. */
+async function columnExists(table, column) {
+  const result = await client.execute(`PRAGMA table_info(${table})`);
+  return result.rows.some((row) => row.name === column);
+}
+
+async function countExcludedBackfilled() {
+  const result = await client.execute({
+    sql: `SELECT COUNT(*) AS n FROM transactions
+           WHERE COALESCE(backfilled, 0) = 1 AND filed_date < ?`,
+    args: [args.trustFlagsFrom],
+  });
+  return Number(result.rows[0]?.n ?? 0);
 }
 
 async function loadPriceSeries(ticker) {
@@ -674,6 +712,9 @@ function parseArgs(argv) {
     to: new Date().toISOString().slice(0, 10),
     buckets: 5,
     includePlanTrades: false,
+    // SECs aff10b5One-Checkbox ist erst seit der Regeländerung 2023 Pflicht — davor nachgeladene
+    // Zeilen tragen kein Planhandel-Kennzeichen. Siehe loadTransactions().
+    trustFlagsFrom: "2023-04-01",
     split: false,
     json: false,
   };
@@ -689,6 +730,7 @@ function parseArgs(argv) {
     else if (arg === "--from") parsed.from = requireIsoDate(argv[++i], arg);
     else if (arg === "--to") parsed.to = requireIsoDate(argv[++i], arg);
     else if (arg === "--include-plan-trades") parsed.includePlanTrades = true;
+    else if (arg === "--trust-flags-from") parsed.trustFlagsFrom = requireIsoDate(argv[++i], arg);
     else if (arg === "--split") parsed.split = true;
     else if (arg === "--json") parsed.json = true;
     else {

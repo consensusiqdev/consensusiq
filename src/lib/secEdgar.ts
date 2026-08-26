@@ -399,16 +399,22 @@ export async function getExchangeListedCompanyCount(): Promise<number> {
   return exchangeListedCount;
 }
 
+type FilingPage = {
+  form?: string[];
+  filingDate?: string[];
+  accessionNumber?: string[];
+  items?: string[];
+};
+
 type SubmissionsJson = {
   sic?: string;
   sicDescription?: string;
   filings?: {
-    recent?: {
-      form?: string[];
-      filingDate?: string[];
-      accessionNumber?: string[];
-      items?: string[];
-    };
+    recent?: FilingPage;
+    // SEC caps `recent` at roughly the last 1000 filings of ANY type and spills everything older
+    // into separate JSON files listed here. For a company that files constantly, 1000 filings can
+    // be as little as a year or two — so anything wanting real history has to follow these.
+    files?: { name: string }[];
   };
 };
 
@@ -430,29 +436,66 @@ async function fetchSubmissionsByCik(cik: string): Promise<SubmissionsJson> {
 
 export type FilingRef = { cik: string; accessionNumber: string; form: string; filedDate: string };
 
+function collectFilingRefs(cik: string, page: FilingPage | undefined, forms: string[], into: FilingRef[]): void {
+  const formList = page?.form ?? [];
+  formList.forEach((form, i) => {
+    if (!forms.includes(form)) return;
+    const accessionNumber = page?.accessionNumber?.[i];
+    const filedDate = page?.filingDate?.[i];
+    if (!accessionNumber || !filedDate) return;
+    into.push({ cik, accessionNumber, form, filedDate });
+  });
+}
+
 /**
- * All of a ticker's filings matching the given form types, from its full SEC filing history
- * (`filings.recent`, typically the ~1000 most recent — enough for the Form 3/4/5 insider history
- * of most companies). Used by the slow historical insider-position backfill — one ticker's full
- * history at a time, not a live/real-time feed like `fetchRecentForm3Accessions`.
+ * A ticker's filings of the given form types, newest first.
+ *
+ * `deep` decides how far back this reaches. SEC's submissions endpoint returns only the ~1000 most
+ * recent filings of ANY type inline (`filings.recent`) and spills older ones into extra JSON files
+ * — for a company that files constantly, "1000 filings" can be as little as a year or two. Callers
+ * that only need the current picture (the insider-position catch-up, which just wants each
+ * insider's latest snapshot) stay on the default and pay one request; the historical Form 4
+ * backfill passes `deep` and pays one extra request per additional page.
  */
-export async function fetchFilingsByForm(ticker: string, forms: string[]): Promise<FilingRef[]> {
+export async function fetchFilingsByForm(
+  ticker: string,
+  forms: string[],
+  { deep = false }: { deep?: boolean } = {}
+): Promise<FilingRef[]> {
   const cik = await getCikForTicker(ticker);
   if (!cik) return [];
 
   const { filings } = await fetchSubmissionsByCik(cik);
-  const recent = filings?.recent;
-  const formList = recent?.form ?? [];
-
   const refs: FilingRef[] = [];
-  formList.forEach((form, i) => {
-    if (!forms.includes(form)) return;
-    const accessionNumber = recent?.accessionNumber?.[i];
-    const filedDate = recent?.filingDate?.[i];
-    if (!accessionNumber || !filedDate) return;
-    refs.push({ cik, accessionNumber, form, filedDate });
-  });
+  collectFilingRefs(cik, filings?.recent, forms, refs);
+  if (!deep) return refs;
+
+  for (const file of filings?.files ?? []) {
+    if (!file?.name) continue;
+    try {
+      const res = await throttledFetch(`https://data.sec.gov/submissions/${file.name}`);
+      collectFilingRefs(cik, (await res.json()) as FilingPage, forms, refs);
+    } catch (err) {
+      // One unreadable page shouldn't discard the history we already have — the caller gets less
+      // depth for this ticker rather than nothing at all.
+      console.warn(`[secEdgar] Ältere Filing-Seite ${file.name} für ${ticker} nicht ladbar:`, err);
+    }
+  }
   return refs;
+}
+
+/**
+ * Turns a filing reference into the shape the Form 4 parser consumes. Lives here so the archive
+ * URL layout stays in this module rather than being rebuilt by every caller that has a FilingRef
+ * and wants transactions out of it.
+ */
+export function accessionFromFilingRef(ref: FilingRef): Form4Accession {
+  return {
+    accessionNumber: ref.accessionNumber,
+    cik: ref.cik,
+    indexUrl: `${SEC_BASE}/Archives/edgar/data/${ref.cik}/${ref.accessionNumber.replace(/-/g, "")}/index.json`,
+    filedAt: ref.filedDate,
+  };
 }
 
 // SC 13D filers occasionally use "SCHEDULE 13D" instead of "SC 13D" — match either prefix.
