@@ -1,5 +1,6 @@
 import type { SortOption } from "@/lib/consensus";
 import SaveScreenButton from "@/components/dashboard/SaveScreenButton";
+import InfoDot from "@/components/ui/InfoDot";
 
 export type DashboardFilters = {
   windowDays: number;
@@ -139,18 +140,23 @@ export default function FilterBar({
         Nur Käufe
       </label>
 
-      <label
-        className="flex items-center gap-1.5 pb-2 text-[12.5px] text-text-dim"
-        title="Nur Trades von CEO/CFO/COO/President/Chairman"
-      >
-        <input
-          type="checkbox"
-          checked={filters.cSuiteOnly}
-          onChange={(e) => onChange({ cSuiteOnly: e.target.checked })}
-          className="h-[15px] w-[15px] accent-accent"
-        />
-        Nur C-Suite
-      </label>
+      {/* InfoDot sits OUTSIDE the <label>: nested in it, a click would toggle the checkbox
+          through the label association instead of opening the explanation. */}
+      <span className="flex items-center gap-1 pb-2 text-[12.5px] text-text-dim">
+        <label className="flex items-center gap-1.5">
+          <input
+            type="checkbox"
+            checked={filters.cSuiteOnly}
+            onChange={(e) => onChange({ cSuiteOnly: e.target.checked })}
+            className="h-[15px] w-[15px] accent-accent"
+          />
+          Nur C-Suite
+        </label>
+        <InfoDot ariaLabel="Was zählt als C-Suite?">
+          Zeigt nur Trades von CEO, CFO, COO, President oder Chairman — nicht von einfachen
+          Directors oder Großaktionären.
+        </InfoDot>
+      </span>
 
       <div className="flex-1" />
 

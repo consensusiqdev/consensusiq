@@ -22,11 +22,10 @@ export default function EventItem({ e }: { e: CompanyEvent }) {
       >
         {e.upcoming && <Badge variant="accent">Bevorstehend</Badge>}
         <span>{fmtCompanyEventLabel(e)}</span>
-        {e.upcoming && (
-          <span className="text-text-faint" title="SEC stellt kein strukturiertes Versammlungsdatum bereit — genauer Termin steht in der Meldung selbst.">
-            · Termin siehe Meldung
-          </span>
-        )}
+        {/* Says outright what a title="…" tooltip used to explain on hover only. This row is
+            already a link into the filing, and nothing may be nested inside it that opens a
+            popover — so the shortest reachable form of the explanation is the visible text. */}
+        {e.upcoming && <span className="text-text-faint">· genauer Termin nur in der Meldung</span>}
         <span className="ml-auto">{fmtDate(e.filedDate)}</span>
       </a>
     </li>

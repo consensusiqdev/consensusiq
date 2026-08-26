@@ -6,6 +6,7 @@ import type { CompanyEvent, InstitutionalEvent, Transaction, TransactionSide } f
 import Badge from "@/components/ui/Badge";
 import WatchButton from "@/components/ui/WatchButton";
 import CrossSignalBadge from "@/components/ui/CrossSignalBadge";
+import InfoDot from "@/components/ui/InfoDot";
 import Sparkline from "@/components/ui/Sparkline";
 import InsiderDetailModal from "@/components/dashboard/InsiderDetailModal";
 import EventItem from "@/components/dashboard/EventItem";
@@ -261,28 +262,22 @@ function TradeItem({ t, onSelectFiler }: { t: Transaction; onSelectFiler: (filer
         </span>
         <span className="text-text-faint">· {fmtUsd(t.valueUsd)}</span>
         {t.nearOffering && (
-          <span
-            className="text-text-faint"
-            title="Kauf im Rahmen eines Börsengangs/Angebots — keine unabhängige Kaufentscheidung, zählt nicht in den Signal Score."
-          >
-            · IPO-Zeichnung
-          </span>
+          <InfoDot label={<span className="text-text-faint">· IPO-Zeichnung</span>}>
+            Kauf im Rahmen eines Börsengangs oder Angebots — keine unabhängige Kaufentscheidung,
+            zählt nicht in den Signal Score.
+          </InfoDot>
         )}
         {t.isPlanTrade && (
-          <span
-            className="text-text-faint"
-            title="Automatisch nach vorab festgelegtem Rule-10b5-1(c)-Handelsplan ausgeführt — keine spontane Entscheidung, zählt nicht in den Signal Score."
-          >
-            · 10b5-1-Plan
-          </span>
+          <InfoDot label={<span className="text-text-faint">· 10b5-1-Plan</span>}>
+            Automatisch nach einem vorab festgelegten Rule-10b5-1(c)-Handelsplan ausgeführt — keine
+            spontane Entscheidung, zählt nicht in den Signal Score.
+          </InfoDot>
         )}
         {t.isFreshInsider && (
-          <span
-            className="text-text-faint"
-            title="Dieser Insider ist erst kürzlich (Form 3) bei der Firma aufgetaucht und kauft schon — rein informativ, fließt nicht in den Signal Score ein."
-          >
-            · Frisch eingestiegen
-          </span>
+          <InfoDot label={<span className="text-text-faint">· Frisch eingestiegen</span>}>
+            Dieser Insider ist erst kürzlich (Form 3) bei der Firma aufgetaucht und kauft schon —
+            rein informativ, fließt nicht in den Signal Score ein.
+          </InfoDot>
         )}
         {t.side === "SELL" &&
           (t.priorAcquisition ? (
