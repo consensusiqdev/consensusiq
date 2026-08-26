@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getFilteredSignals, parseSignalsQueryParams } from "@/lib/signalsQuery";
+import { getFilteredSignalsCached, parseSignalsQueryParams } from "@/lib/signalsQuery";
 
 const COLUMNS = [
   "ticker",
@@ -24,7 +24,7 @@ function csvField(value: string | number | null): string {
 // dashboard.
 export async function GET(request: NextRequest) {
   const query = parseSignalsQueryParams(request.nextUrl.searchParams);
-  const signals = await getFilteredSignals(query);
+  const signals = await getFilteredSignalsCached(query);
 
   const lines = [COLUMNS.join(",")];
   for (const s of signals) {

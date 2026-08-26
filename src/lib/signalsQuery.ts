@@ -87,6 +87,21 @@ export async function getFilteredSignals(query: SignalsQueryParams): Promise<Tic
   return signals;
 }
 
+/**
+ * Cached wrapper around getFilteredSignals() for the two public read-only views that render the
+ * same signal list on every request with no per-user variation (/feed.xml, the CSV export).
+ * Deliberately NOT applied to getFilteredSignals() itself: screens.ts (checkSavedScreensAndAlert),
+ * digest.ts, and tickerDetail.ts's percentile lookup all call it expecting the current DB state —
+ * caching there would delay alerts/digests by up to `ingestCadence`'s revalidate window, which for
+ * an alerting path defeats the point. Same cacheLife as the dashboard's own initial data, since
+ * both are views over the identical ingest cadence.
+ */
+export async function getFilteredSignalsCached(query: SignalsQueryParams): Promise<TickerSignal[]> {
+  "use cache";
+  cacheLife("ingestCadence");
+  return getFilteredSignals(query);
+}
+
 export type DashboardData = {
   filers: FilerSummary[];
   signals: TickerSignal[];

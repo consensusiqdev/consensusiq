@@ -143,15 +143,21 @@ wird, fehlen lokal.
 - **Die Messung.** Es gibt weiterhin keine Vergleichsbasis für diesen Umbau — Grund oben unter
   Falle 2. Die Zahlen der Vorgänger-Notiz (~0,98 s → ~0,12 s) beziehen sich auf die
   `unstable_cache`-Zwischenlösung aus PR #5, nicht auf diesen Stand. Nachzuholen in einer Umgebung
-  mit gültigen Clerk-Keys und einer Fixture in realistischer Größe.
+  mit gültigen Clerk-Keys und einer Fixture in realistischer Größe. Erneut geprüft beim Merge dieses
+  Branches auf `claude/cache-components-migration-5objk3`: diese Umgebung hat zusätzlich weder
+  `TURSO_DATABASE_URL` noch irgendeine `.env.local`, `next build` scheitert also schon vor dem
+  Clerk-Problem am DB-Client. Kein neuer Befund, nur dieselbe Blockade aus einer anderen Umgebung
+  bestätigt.
 - **`generateStaticParams` fehlt für alle dynamischen Routen.** Deshalb `instant = false` auf
   `/sector/[slug]` und `/compare/[a]/[b]`. Mit vorab gerenderten Top-Tickern/-Branchen ließe sich
   das gegen echte App-Shells eintauschen.
-- **`getFilteredSignals()` ist ungecacht.** Innerhalb von `getTickerDetail` deckt der äußere Cache
-  es ab, aber `/feed.xml` und der CSV-Export rufen es ungecacht direkt auf — je ein voller
-  Marktdurchlauf pro Anfrage.
-- **Konflikt mit PR #5.** Dessen Commit `93d8f79` stellt dieselben Funktionen in
-  `src/lib/tickerDetail.ts` auf `unstable_cache` (`src/lib/cached.ts`) um. Zusammengeführt ergäbe
-  das `unstable_cache` um `use cache` herum — doppelt gecacht, ohne Nutzen. Dieser Umbau ersetzt
-  jene Zwischenlösung vollständig und deckt zusätzlich `/dashboard` und `/compare` ab, die PR #5
-  nicht anfasst.
+- ~~**`getFilteredSignals()` ist ungecacht.**~~ Erledigt: `getFilteredSignalsCached()` in
+  `signalsQuery.ts` deckt jetzt `/feed.xml` und den CSV-Export ab (`cacheLife("ingestCadence")`,
+  wie `/dashboard`). Bewusst als eigene Funktion und nicht als `"use cache"` auf
+  `getFilteredSignals()` selbst: `checkSavedScreensAndAlert()`, `digest.ts` und die
+  Perzentil-Berechnung in `tickerDetail.ts` rufen die ungecachte Funktion mit Erwartung auf den
+  aktuellen DB-Stand auf — ein Alarm-Pfad, der bis zu 5 Minuten alte Daten sieht, wäre eine
+  Regression, kein Fix.
+- **Konflikt mit PR #5.** Aufgelöst: PR #5 wurde vor dem Merge auf den ersten Commit (den lokalen
+  Positions-Nachlauf) eingedampft, `src/lib/cached.ts` kam nie auf `main`. Dieser Umbau mergt
+  konfliktfrei.

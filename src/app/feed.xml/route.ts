@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getFilteredSignals, parseSignalsQueryParams } from "@/lib/signalsQuery";
+import { getFilteredSignalsCached, parseSignalsQueryParams } from "@/lib/signalsQuery";
 import { fmtSignalScore, fmtUsd } from "@/lib/format";
 import { SITE_NAME, SITE_URL } from "@/lib/seo";
 
@@ -19,7 +19,7 @@ const FEED_LIMIT = 50;
 // URL can encode a specific filter combination, same as bookmarking a dashboard URL would.
 export async function GET(request: NextRequest) {
   const query = parseSignalsQueryParams(request.nextUrl.searchParams);
-  const signals = (await getFilteredSignals(query)).slice(0, FEED_LIMIT);
+  const signals = (await getFilteredSignalsCached(query)).slice(0, FEED_LIMIT);
 
   const items = signals
     .map((s) => {
