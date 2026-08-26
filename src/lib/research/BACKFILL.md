@@ -101,6 +101,35 @@ wird statt über den Gesamtmarkt.
 Die Offering-Prüfung fällt kaum ins Gewicht: `tickerCikMap` und `submissionsCache` sind modulweit
 gecacht, das kostet ungefähr eine Anfrage je Issuer statt je Meldung.
 
+## Der zweite Nachlauf: Insider-Positionen
+
+`scripts/backfill-positions.mjs` ist das Gegenstück für `insider_positions` — also "wer hält wie
+viele Aktien", die Insider-Liste auf der Unternehmensseite. Andere Tabelle, andere Frage, gleiche
+Machart:
+
+```bash
+npm run research:positions
+```
+
+Diese Arbeit macht sonst der Cron unter `/api/cron/backfill`, in Häppchen von 15 Meldungen alle
+paar Minuten. Für die **Erstbefüllung** ist das der falsche Weg: es zieht sich über Wochen und
+kostet für jeden Anstoß eine Vercel-Invocation, auch wenn nichts zu tun ist. Lokal läuft dieselbe
+Arbeit an einem Stück.
+
+Beide teilen sich die Fortschritts-Tabelle `insider_backfill_status`. Was das Skript auf `'done'`
+setzt, überspringt der Cron anschließend (siehe `getNextBackfillTicker()` in `db.ts`) — sie treten
+sich also nicht auf die Füße, egal wer zuerst dran war. **Nach der Erstbefüllung kann der Cron
+deutlich seltener laufen**: er hat dann nur noch neu auftauchende Ticker einzusammeln, und dafür
+reicht ein Intervall von Stunden statt Minuten.
+
+Das Skript korrigiert dabei etwas, das nur es korrigieren kann: `first_seen_date` wird im laufenden
+Betrieb ausschließlich beim allerersten INSERT geschrieben. Ein Insider, den der Live-Ingest über
+eine aktuelle Form 4 kennengelernt hat, trägt als "erstmals gesehen" das Ingest-Datum — auch wenn
+seine echte Form 3 Jahre älter ist. Weil dieses Skript als einziges die vollständige Historie sieht
+und sie von alt nach neu abarbeitet, setzt es den Wert auf die früheste tatsächlich bekannte
+Meldung, und zwar nur nach unten. Betrifft das "frisch eingestiegen"-Badge; der Signal Score liest
+die Spalte nicht.
+
 ## Danach
 
 `npm run research:prices`, dann `npm run research:backtest -- --split`. Die Datengrundlage im
