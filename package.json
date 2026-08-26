@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test scripts/test-research.mjs",
     "research:prices": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --env-file=.env.local scripts/sync-prices.mjs",
-    "research:backtest": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --env-file=.env.local scripts/backtest.mjs"
+    "research:backtest": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --env-file=.env.local scripts/backtest.mjs",
+    "research:backfill": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --env-file=.env.local scripts/backfill-form4.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.6.5",

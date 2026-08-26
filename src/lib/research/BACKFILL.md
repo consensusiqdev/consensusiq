@@ -1,89 +1,108 @@
-# Geplant: historischer Form-4-Nachlauf
+# Historischer Form-4-Nachlauf
 
-Notiz für später, nicht umgesetzt. Der Backtest in diesem Verzeichnis funktioniert, hat aber zu
-wenig Historie, um etwas auszusagen — `transactions` enthält nur, was seit Beginn des Ingests
-eingelaufen ist. Kurse lassen sich sofort Jahre zurück laden, die Insider-Meldungen sind der
-Engpass. Das hier ist der Weg, sie nachzuziehen.
+Umgesetzt in `scripts/backfill-form4.mjs`. Diese Datei erklärt, warum es ihn gibt, wie er läuft und
+wo seine Grenzen liegen.
 
-Nützt nicht nur der Auswertung: tiefere Historie verbessert auch die Unternehmensseiten und die
-`priorAcquisition`-Anreicherung, die heute an "Ingest-Start" endet.
+`transactions` enthält von Haus aus nur, was seit Beginn des Ingests eingelaufen ist. Kurse lassen
+sich sofort Jahre zurück laden, die Insider-Meldungen sind der Engpass — ohne sie kann der Backtest
+in diesem Verzeichnis nichts aussagen. Nützt nicht nur der Auswertung: tiefere Historie verbessert
+auch die Unternehmensseiten und die `priorAcquisition`-Anreicherung, die sonst an „Ingest-Start"
+endet.
 
-## Ansatz
+## So läuft er
 
-SEC EDGAR veröffentlicht pro Quartal einen vollständigen Filing-Index:
-
-```
-https://www.sec.gov/Archives/edgar/full-index/{Jahr}/QTR{1-4}/form.idx
-```
-
-Feste Spaltenbreiten, eine Zeile je Filer und Filing: `Form Type | Company Name | CIK | Date Filed |
-File Name`. Aus dem Dateinamen (`edgar/data/{cik}/{accession}.txt`) fallen Accession-Nummer und CIK
-direkt heraus — zusammen mit dem Datum ist das genau das, was `Form4Accession` in
-`src/lib/secEdgar.ts` braucht:
-
-```ts
-{ accessionNumber, cik, indexUrl, filedAt }
-// indexUrl = `${SEC_BASE}/Archives/edgar/data/${cik}/${accessionNumber.replace(/-/g,"")}/index.json`
+```bash
+node --env-file=.env.local scripts/add-backfilled-column.mjs   # einmalig
+node --env-file=.env.local scripts/backfill-form4.mjs
 ```
 
-Ab da übernimmt der vorhandene Parser unverändert: `fetchTransactionsForAccessions()` liefert
-fertige `Transaction[]`, `insertTransactionsBatch()` schreibt sie mit `INSERT OR IGNORE`, und
-`processed_accessions` macht Wiederanläufe billig. Es ist also kein neuer Parser nötig, nur eine
-andere Quelle für die Accession-Liste.
+Läuft **lokal**, nicht auf Vercel. Ein Durchgang dauert Stunden und sprengt jedes Function-Limit um
+Größenordnungen; außerdem ist es ein einmaliger Vorgang, kein Betriebsablauf. Er kostet dadurch
+keine einzige Vercel-Invocation. Die Daten landen trotzdem in der **echten** Datenbank — Turso ist
+ein gehosteter Dienst, den der eigene Rechner genauso erreicht wie Vercel es tut.
 
-**Wichtig:** dieselbe Meldung erscheint in `form.idx` mehrfach — einmal je beteiligtem Filer
-(Issuer und jeder Reporting Owner). Nach `accessionNumber` deduplizieren.
+Abbruch mit Strg-C ist jederzeit sicher. Der Fortschritt steht pro Ticker in
+`form4_backfill_status`, ein Neustart macht dort weiter. Innerhalb eines Tickers wird von alt nach
+neu gearbeitet, damit ein abgebrochener Lauf einen zusammenhängenden Zeitraum hinterlässt statt
+Löcher über die ganze Historie.
+
+Nützliche Schalter: `--tickers AAPL,MSFT` für einen gezielten Lauf, `--limit 20` um einen Durchgang
+zu begrenzen, `--from` um den Stichtag zu verschieben (siehe unten), `--force` um bereits fertige
+Ticker erneut zu holen.
+
+## Warum kein `full-index`
+
+Eine frühere Fassung dieser Notiz schlug vor, SECs Quartals-Index
+(`full-index/{Jahr}/QTR{n}/form.idx`) zu parsen und daraus die Accession-Nummern zu ziehen, und
+bezeichnete das Filtern auf getrackte Ticker als „den Hebel". Beides war unnötig:
+**`fetchFilingsByForm(ticker, ["4"])` existiert bereits** und liefert genau das — die
+Form-4-Historie eines Tickers. Der vorhandene Positions-Nachlauf (`backfillNextTicker`) benutzt sie
+seit jeher, nur mit `["3","4","5"]` und mit `insider_positions` als Ziel.
+
+Der Nachlauf ist deshalb kein neuer Parser, sondern eine andere Quelle für dieselbe Kette:
+`fetchFilingsByForm` → `accessionFromFilingRef` → `fetchTransactionsForAccessions` → Insert.
+
+## Wie tief er reicht
+
+SECs Submissions-Endpunkt liefert nur die rund 1000 jüngsten Filings **jeder Art** inline
+(`filings.recent`) und lagert Älteres in zusätzliche JSON-Dateien aus. Bei einem vielfilenden
+Emittenten sind 1000 Filings schnell nur ein bis zwei Jahre.
+
+`fetchFilingsByForm` folgt diesen ausgelagerten Seiten inzwischen, wenn man `{ deep: true }`
+übergibt — der Nachlauf tut das, der Positions-Crawl bewusst nicht (er will nur den aktuellen Stand
+je Insider und spart sich die Extra-Anfragen).
+
+## Der Stichtag — der Punkt, an dem es sonst still falsch würde
+
+SECs `aff10b5One`-Checkbox, die Quelle für `is_plan_trade`, ist erst seit der Regeländerung 2023
+Pflichtfeld. Ältere Meldungen kommen ohne Kennzeichen an und läsen sich als „kein Planhandel". Da
+der Signal Score Planhandel **ausschließt**, würde der Backtest auf solchen Zeilen Signale bewerten,
+die die Live-App nie erzeugt hätte — ohne dass an den Zahlen etwas auffiele.
+
+Deshalb zwei Vorkehrungen, die zusammengehören:
+
+- Der Nachlauf schreibt jede Zeile mit `backfilled = 1` und holt per Vorgabe erst ab `2023-04-01`.
+- Der Backtest ignoriert nachgeladene Zeilen vor `--trust-flags-from` (Vorgabe ebenfalls
+  `2023-04-01`) und weist in der Datengrundlage aus, wie viele das waren. Zeilen aus dem
+  Live-Ingest sind nie betroffen.
+
+Wer bewusst tiefer will — etwa für die Unternehmensseiten, die die Flags gar nicht brauchen —
+setzt `--from` beim Nachlauf. Der Backtest lässt solche Zeilen dann trotzdem draußen, solange
+`--trust-flags-from` nicht mitverschoben wird. Das ist Absicht.
+
+## Was mit den übrigen Flags passiert
+
+Eine frühere Fassung dieser Notiz führte drei problematische Felder auf. Nachgeprüft sind es
+weniger:
+
+| Feld | Stand |
+|---|---|
+| `is_c_suite` | Korrekt. Kommt aus dem `officerTitle` derselben Meldung. |
+| `near_offering` | Korrekt. Wird über `hasRecentOffering(ticker, transactionDate)` aus der Filing-Historie nach Datum bestimmt und funktioniert damit rückwirkend genauso. |
+| `is_fresh_insider` | Bleibt 0. Bräuchte die Form-3-Ersterfassung aus der Zeit **vor** der jeweiligen Transaktion. Fließt aber **nicht** in den Signal Score ein (nur ins Badge) — verfälscht also keine Auswertung. |
+| `is_plan_trade` | Der einzige echte Fall, siehe Stichtag oben. |
+
+Nebenbei aufgefallen und hier nicht behoben: `insider_positions.first_seen_date` wird nur beim
+allerersten INSERT geschrieben und danach nie korrigiert. Ein Insider, den der Live-Ingest bereits
+kennt, trägt als „erstmals gesehen" das Ingest-Datum — auch wenn später seine echte, ältere Form 3
+nachgeladen wird. Betrifft ausschließlich das „frisch eingestiegen"-Badge.
 
 ## Was es kostet
 
-Im Code nachgesehen, nicht geschätzt:
+`throttledFetch` in `secEdgar.ts` erzwingt `REQUEST_DELAY_MS = 120` modulweit — die `concurrency`
+in `fetchTransactionsForAccessions()` bringt deshalb keinen Durchsatz, alles serialisiert über die
+Drossel. `fetchFilingOwnershipXml()` macht **zwei** Anfragen je Meldung (`index.json`, dann die
+XML), macht ~240 ms pro Meldung.
 
-- `throttledFetch` in `secEdgar.ts` erzwingt `REQUEST_DELAY_MS = 120` modulweit — die `concurrency
-  = 5` in `fetchTransactionsForAccessions()` bringt deshalb keinen Durchsatz, alles serialisiert
-  über die Drossel.
-- `fetchFilingOwnershipXml()` macht **zwei** Anfragen je Meldung (`index.json`, dann die XML).
+Bei einigen hundert getrackten Tickern à grob 100–300 Form-4-Meldungen seit 2023 landet man bei
+**wenigen Stunden**, nicht bei den zwanzig aus der ersten Schätzung — weil pro Ticker gearbeitet
+wird statt über den Gesamtmarkt.
 
-Macht ~240 ms je Meldung, also rund **15.000 Meldungen pro Stunde**. Bei grob 300.000 Form-4-
-Meldungen pro Jahr über den Gesamtmarkt wären das ~20 Stunden für ein Jahr Vollabdeckung.
+Die Offering-Prüfung fällt kaum ins Gewicht: `tickerCikMap` und `submissionsCache` sind modulweit
+gecacht, das kostet ungefähr eine Anfrage je Issuer statt je Meldung.
 
-Die Offering-Prüfung (`hasRecentOffering`) fällt kaum ins Gewicht: `tickerCikMap` und
-`submissionsCache` sind modulweit gecacht, das kostet ungefähr eine Anfrage je Issuer statt je
-Meldung.
+## Danach
 
-## Der Hebel: nicht alles holen
-
-Für die Auswertung reichen die Meldungen zu den Tickern, die wir ohnehin verfolgen — ein paar
-hundert Unternehmen von mehreren tausend Emittenten. Da der Issuer als eigene Zeile in `form.idx`
-steht, lässt sich vorab nach Issuer-CIK filtern und erst danach herunterladen. Das schneidet das
-Volumen um mehr als eine Größenordnung und bringt die 20 Stunden auf einen Nachmittag.
-
-Issuer-CIKs kommen aus SECs `company_tickers.json`, das `getCikForTicker()` bereits lädt und cacht.
-
-Rückwärts laufen lassen (jüngstes Quartal zuerst): dann ist die Auswertung schon nutzbar, während
-ältere Quartale noch nachlaufen.
-
-## Der Stolperstein, der den Backtest still verfälschen würde
-
-Drei Felder lassen sich historisch **nicht** vollständig rekonstruieren, und alle drei greifen
-direkt in die Score-Berechnung ein:
-
-| Feld | Problem |
-|---|---|
-| `is_plan_trade` | SECs `aff10b5One` ist erst seit der Regeländerung 2023 Pflichtfeld. Davor gibt es keinen Wert — nachgeladene Meldungen bekämen also 0. |
-| `is_fresh_insider` | Braucht `insider_positions`-Historie (Form-3-Ersterfassung) aus der Zeit *vor* der jeweiligen Transaktion. Die existiert für den Nachlauf-Zeitraum nicht. |
-| `is_c_suite` | Kommt aus dem Freitext `officerTitle` derselben Meldung, ist also verfügbar — hier ist nichts kaputt. |
-
-`is_plan_trade` ist der gefährliche Fall: der Score schließt Planhandel aus, und für nachgeladene
-Meldungen sähe es aus, als hätte es damals gar keinen gegeben. Der Backtest würde dann auf
-Signalen laufen, die die Live-App so nie erzeugt hätte — und zwar ohne dass irgendetwas auffällt.
-
-Also beim Nachladen zwingend eine Spalte mitschreiben, ab wann die Flags belastbar sind (etwa
-`flags_complete_from` oder schlicht ein `backfilled`-Marker je Zeile), und den Backtest defaulten
-lassen, nur Zeiträume mit vollständigen Flags auszuwerten. Lieber weniger Ereignisse als
-still falsche.
-
-## Wo das läuft
-
-Lokal, als Skript in `scripts/`, in der Machart der übrigen Wartungsskripte. Nicht als Cron und
-nicht als API-Route — die Laufzeit sprengt jedes Serverless-Limit um Größenordnungen, und es ist
-ein einmaliger Vorgang, kein Betriebsablauf.
+`npm run research:prices`, dann `npm run research:backtest -- --split`. Die Datengrundlage im
+Bericht zeigt, wie viele Ereignisse tatsächlich zusammengekommen sind — und warnt weiterhin, wenn
+es unter `MIN_RELIABLE_SAMPLE` bleibt.
