@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Spinner from "@/components/ui/Spinner";
 import WatchlistCard from "@/components/watchlist/WatchlistCard";
 
 export default function WatchlistClient() {
@@ -76,7 +77,10 @@ export default function WatchlistClient() {
 
       <div className="mt-6">
         {loading ? (
-          <p className="font-mono text-[12.5px] text-text-faint">Lädt…</p>
+          <p className="flex items-center gap-2 font-mono text-[12.5px] text-text-faint">
+            <Spinner className="h-3.5 w-3.5" />
+            Lädt…
+          </p>
         ) : tickers.length === 0 ? (
           <p className="font-mono text-[12.5px] leading-relaxed text-text-faint">
             Noch keine Aktien beobachtet. Füge einen Ticker hinzu, um per E-Mail informiert zu

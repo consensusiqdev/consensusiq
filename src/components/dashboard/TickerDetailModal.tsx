@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Spinner from "@/components/ui/Spinner";
 import type { CompanyEvent, InstitutionalEvent, Transaction, TransactionSide } from "@/types/filing";
 import Badge from "@/components/ui/Badge";
 import WatchButton from "@/components/ui/WatchButton";
@@ -149,7 +150,10 @@ export default function TickerDetailModal({
         </div>
 
         {loading && (
-          <p className="mt-6 font-mono text-[12.5px] text-text-faint">Lädt Handelshistorie…</p>
+          <p className="mt-6 flex items-center gap-2 font-mono text-[12.5px] text-text-faint">
+            <Spinner className="h-3.5 w-3.5" />
+            Lädt Handelshistorie…
+          </p>
         )}
         {error && <p className="mt-6 font-mono text-[12.5px] text-no">{error}</p>}
 

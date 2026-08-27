@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { InsiderTransaction, SharesHistoryPoint, TrackRecord } from "@/lib/insiderDetail";
 import Badge from "@/components/ui/Badge";
+import Spinner from "@/components/ui/Spinner";
 import SharesHistoryChart from "@/components/ui/SharesHistoryChart";
 import { fmtDate, fmtShares, fmtUsd, sideChipClass } from "@/lib/format";
 
@@ -111,7 +112,12 @@ export default function InsiderDetailModal({
           </button>
         </div>
 
-        {loading && <p className="mt-6 font-mono text-[12.5px] text-text-faint">Lädt Insider-Details…</p>}
+        {loading && (
+          <p className="mt-6 flex items-center gap-2 font-mono text-[12.5px] text-text-faint">
+            <Spinner className="h-3.5 w-3.5" />
+            Lädt Insider-Details…
+          </p>
+        )}
         {error && <p className="mt-6 font-mono text-[12.5px] text-no">{error}</p>}
 
         {detail && (

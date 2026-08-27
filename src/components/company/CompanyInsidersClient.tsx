@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Badge from "@/components/ui/Badge";
+import Spinner from "@/components/ui/Spinner";
 import InsiderDetailModal from "@/components/dashboard/InsiderDetailModal";
 import { fmtDate, fmtShares } from "@/lib/format";
 
@@ -74,7 +75,12 @@ export default function CompanyInsidersClient({ ticker }: { ticker: string }) {
   }
 
   if (loading) {
-    return <p className="font-mono text-[12.5px] text-text-faint">Lädt Insider…</p>;
+    return (
+      <p className="flex items-center gap-2 font-mono text-[12.5px] text-text-faint">
+        <Spinner className="h-3.5 w-3.5" />
+        Lädt Insider…
+      </p>
+    );
   }
   if (error) {
     return <p className="font-mono text-[12.5px] text-no">{error}</p>;

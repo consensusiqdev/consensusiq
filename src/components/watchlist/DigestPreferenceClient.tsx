@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Spinner from "@/components/ui/Spinner";
 import type { DigestFrequency, DigestPreferenceRow } from "@/lib/db";
 
 type Choice = "off" | DigestFrequency;
@@ -45,7 +46,13 @@ export default function DigestPreferenceClient() {
     }
   }
 
-  if (loading) return <p className="font-mono text-[12.5px] text-text-faint">Lädt…</p>;
+  if (loading)
+    return (
+      <p className="flex items-center gap-2 font-mono text-[12.5px] text-text-faint">
+        <Spinner className="h-3.5 w-3.5" />
+        Lädt…
+      </p>
+    );
 
   return (
     <div className="flex flex-wrap items-center gap-3">

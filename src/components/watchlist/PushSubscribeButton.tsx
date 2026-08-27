@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Spinner from "@/components/ui/Spinner";
 
 type Status = "checking" | "unsupported" | "off" | "on" | "denied";
 
@@ -88,7 +89,13 @@ export default function PushSubscribeButton() {
     }
   }
 
-  if (status === "checking") return <p className="font-mono text-[12.5px] text-text-faint">Lädt…</p>;
+  if (status === "checking")
+    return (
+      <p className="flex items-center gap-2 font-mono text-[12.5px] text-text-faint">
+        <Spinner className="h-3.5 w-3.5" />
+        Lädt…
+      </p>
+    );
 
   if (status === "unsupported") {
     return (

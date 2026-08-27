@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Spinner from "@/components/ui/Spinner";
 import type { SavedScreenRow } from "@/lib/db";
 
 export default function SavedScreensClient() {
@@ -32,7 +33,13 @@ export default function SavedScreensClient() {
     }
   }
 
-  if (loading) return <p className="font-mono text-[12.5px] text-text-faint">Lädt…</p>;
+  if (loading)
+    return (
+      <p className="flex items-center gap-2 font-mono text-[12.5px] text-text-faint">
+        <Spinner className="h-3.5 w-3.5" />
+        Lädt…
+      </p>
+    );
 
   return (
     <div>
