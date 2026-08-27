@@ -30,6 +30,21 @@ Nützliche Schalter: `--tickers AAPL,MSFT` für einen gezielten Lauf, `--limit 2
 zu begrenzen, `--from` um den Stichtag zu verschieben (siehe unten), `--force` um bereits fertige
 Ticker erneut zu holen.
 
+## Wenn SEC drosselt: `--retry-failed`
+
+Eine Meldung, die auch nach throttledFetch()s eigenem Retry (503/429, siehe secEdgar.ts) noch
+fehlschlägt, zählt trotzdem als "erledigt" für den Ticker-Fortschritt — ein normaler Neustart
+wiederholt sie nie. Beide Skripte schreiben so eine Meldung stattdessen in `backfill_failures`
+(`scripts/add-backfill-failures-table.mjs`, einmalig anzulegen). `--retry-failed` arbeitet gezielt
+nur diese Zeilen ab, unabhängig vom Ticker-Durchlauf — sinnvoll deutlich später als der
+ursprüngliche Lauf, wenn eine SEC-seitige Drosselung sich gelegt hat:
+
+```bash
+node --env-file=.env.local scripts/add-backfill-failures-table.mjs   # einmalig
+node --env-file=.env.local scripts/backfill-form4.mjs --retry-failed
+node --env-file=.env.local scripts/backfill-positions.mjs --retry-failed
+```
+
 ## Warum kein `full-index`
 
 Eine frühere Fassung dieser Notiz schlug vor, SECs Quartals-Index

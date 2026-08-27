@@ -11,12 +11,19 @@
 //   node --env-file=.env.local scripts/backfill-positions.mjs
 //   node --env-file=.env.local scripts/backfill-positions.mjs --tickers AAPL,MSFT
 //   node --env-file=.env.local scripts/backfill-positions.mjs --limit 20
+//   node --env-file=.env.local scripts/backfill-positions.mjs --retry-failed
 //
 // Teilt sich die Fortschritts-Tabelle `insider_backfill_status` mit dem Cron: was hier auf 'done'
 // gesetzt wird, überspringt der Cron anschließend (siehe getNextBackfillTicker() in db.ts). Beide
 // treten sich also nicht auf die Füße, egal wer zuerst dran war.
 //
 // Abbruch mit Strg-C ist jederzeit sicher — der Fortschritt steht je Ticker in derselben Tabelle.
+//
+// Eine Meldung, die auch nach throttledFetch()s eigenem Retry noch fehlschlägt (siehe secEdgar.ts),
+// zählt trotzdem als "erledigt" für den Ticker-Fortschritt oben und würde sonst nie wiederholt. Sie
+// landet stattdessen in `backfill_failures`; `--retry-failed` arbeitet gezielt nur diese Zeilen ab,
+// unabhängig vom Ticker-Durchlauf — sinnvoll Stunden später, wenn SEC nicht mehr drosselt. Setzt
+// scripts/add-backfill-failures-table.mjs voraus.
 import { createClient } from "@libsql/client";
 
 // Wie in backfill-form4.mjs: secEdgar.ts wirft schon beim Laden ohne SEC_EDGAR_USER_AGENT, und
@@ -28,6 +35,11 @@ const PROGRESS_CHUNK_SIZE = 15; // wie der Cron: Fortschritt regelmäßig sicher
 
 const args = parseArgs(process.argv.slice(2));
 const client = createDbClient();
+
+if (args.retryFailed) {
+  await retryFailed(args.limit);
+  process.exit(0);
+}
 
 const tickers = args.tickers ?? (await trackedTickers());
 console.log(`Positions-Nachlauf · ${tickers.length} Ticker` + (args.limit ? ` · max. ${args.limit} in diesem Lauf` : ""));
@@ -70,6 +82,10 @@ console.log(
     ? "Alle getrackten Ticker sind nachgeladen. Der Cron holt ab jetzt nur noch Neuzugänge."
     : `${open} Ticker noch offen — Skript einfach erneut starten, es macht dort weiter.`
 );
+const failedCount = await countUnresolvedFailures("positions");
+if (failedCount > 0) {
+  console.log(`${failedCount} Meldungen aus diesem oder früheren Läufen sind noch offen — --retry-failed nachschieben.`);
+}
 
 // ---------------------------------------------------------------------------
 
@@ -105,6 +121,7 @@ async function backfillTicker(ticker, alreadyDone) {
         positions++;
       } catch (err) {
         console.warn(`\n    ${ticker} ${filing.accessionNumber}: ${err instanceof Error ? err.message : err}`);
+        await recordFailure(ticker, filing, err);
       }
     }
     done += chunk.length;
@@ -115,6 +132,36 @@ async function backfillTicker(ticker, alreadyDone) {
   await markDone(ticker);
   console.log(` ${positions} Positionen${repaired > 0 ? `, ${repaired} korrigiert` : ""}`);
   return { positions, repaired };
+}
+
+/** Arbeitet gezielt nur `backfill_failures`-Zeilen ab, unabhängig vom normalen Ticker-Durchlauf
+ * oben — der Sinn ist, das Stunden später erneut laufen zu lassen, wenn eine SEC-seitige Drosselung
+ * (die throttledFetch()s eigenen Retry schon überstanden hat) sich gelegt hat. */
+async function retryFailed(limit) {
+  const rows = await getUnresolvedFailures("positions", limit);
+  if (rows.length === 0) {
+    console.log("Keine offenen Fehlschläge für den Positions-Nachlauf.");
+    return;
+  }
+  console.log(`Wiederhole ${rows.length} zuvor fehlgeschlagene Meldungen … `);
+  let resolved = 0;
+  for (const row of rows) {
+    try {
+      const position = await fetchOwnershipPosition(row.cik, row.accession_number);
+      if (position) {
+        const sourceType = sourceTypeForForm(row.form);
+        await upsertPosition(position, sourceType);
+        await repairFirstSeen(position, sourceType);
+      }
+      await resolveFailure("positions", row.ticker, row.accession_number);
+      resolved++;
+      process.stdout.write(".");
+    } catch (err) {
+      await bumpFailure("positions", row.ticker, row.accession_number, err);
+      process.stdout.write("x");
+    }
+  }
+  console.log(`\n${resolved}/${rows.length} beim Wiederholen erfolgreich.`);
 }
 
 function sourceTypeForForm(form) {
@@ -226,6 +273,76 @@ async function markDone(ticker) {
   });
 }
 
+/** Bewahrt eine Meldung, die auch nach throttledFetch()s eigenem Retry noch fehlschlägt, statt sie
+ * nur zu loggen — sonst gilt sie für den Ticker-Fortschritt als erledigt und wird nie wiederholt.
+ * Absichtlich mit eigenem try/catch: fehlt die Tabelle (add-backfill-failures-table.mjs noch nicht
+ * gelaufen), soll das den eigentlichen Backfill nicht mit umwerfen. */
+async function recordFailure(ticker, filing, err) {
+  const now = Date.now();
+  try {
+    await client.execute({
+      sql: `INSERT INTO backfill_failures
+              (script, ticker, cik, accession_number, filed_date, form, attempts, last_error, first_failed_at, last_attempt_at)
+            VALUES ('positions', ?, ?, ?, ?, ?, 1, ?, ?, ?)
+            ON CONFLICT(script, ticker, accession_number) DO UPDATE SET
+              attempts = backfill_failures.attempts + 1,
+              last_error = excluded.last_error,
+              last_attempt_at = excluded.last_attempt_at,
+              resolved_at = NULL`,
+      args: [
+        ticker,
+        filing.cik,
+        filing.accessionNumber,
+        filing.filedDate ?? null,
+        filing.form ?? null,
+        err instanceof Error ? err.message : String(err),
+        now,
+        now,
+      ],
+    });
+  } catch (recordErr) {
+    console.warn(
+      `    Konnte Fehlschlag nicht in backfill_failures speichern (Tabelle angelegt? scripts/add-backfill-failures-table.mjs): ${recordErr instanceof Error ? recordErr.message : recordErr}`
+    );
+  }
+}
+
+async function resolveFailure(script, ticker, accessionNumber) {
+  await client.execute({
+    sql: `UPDATE backfill_failures SET resolved_at = ? WHERE script = ? AND ticker = ? AND accession_number = ?`,
+    args: [Date.now(), script, ticker, accessionNumber],
+  });
+}
+
+async function bumpFailure(script, ticker, accessionNumber, err) {
+  await client.execute({
+    sql: `UPDATE backfill_failures
+             SET attempts = attempts + 1, last_error = ?, last_attempt_at = ?
+           WHERE script = ? AND ticker = ? AND accession_number = ?`,
+    args: [err instanceof Error ? err.message : String(err), Date.now(), script, ticker, accessionNumber],
+  });
+}
+
+async function getUnresolvedFailures(script, limit) {
+  const result = await client.execute({
+    sql: limit
+      ? `SELECT ticker, cik, accession_number, filed_date, form FROM backfill_failures
+          WHERE script = ? AND resolved_at IS NULL ORDER BY first_failed_at LIMIT ?`
+      : `SELECT ticker, cik, accession_number, filed_date, form FROM backfill_failures
+          WHERE script = ? AND resolved_at IS NULL ORDER BY first_failed_at`,
+    args: limit ? [script, limit] : [script],
+  });
+  return result.rows;
+}
+
+async function countUnresolvedFailures(script) {
+  const result = await client.execute({
+    sql: `SELECT COUNT(*) AS n FROM backfill_failures WHERE script = ? AND resolved_at IS NULL`,
+    args: [script],
+  });
+  return Number(result.rows[0]?.n ?? 0);
+}
+
 async function countOpenTickers() {
   const result = await client.execute(
     `SELECT COUNT(*) AS n FROM (SELECT DISTINCT ticker FROM transactions) t
@@ -240,6 +357,7 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--force") parsed.force = true;
+    else if (arg === "--retry-failed") parsed.retryFailed = true;
     else if (arg === "--limit") parsed.limit = requirePositiveInt(argv[++i], arg);
     else if (arg === "--tickers")
       parsed.tickers = argv[++i].split(",").map((t) => t.trim().toUpperCase()).filter(Boolean);
