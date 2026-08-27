@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Spinner from "@/components/ui/Spinner";
+import TickerAutocompleteInput from "@/components/ui/TickerAutocompleteInput";
 import WatchlistCard from "@/components/watchlist/WatchlistCard";
 
 export default function WatchlistClient() {
@@ -21,9 +22,8 @@ export default function WatchlistClient() {
       .finally(() => setLoading(false));
   }, []);
 
-  async function handleAdd(e: React.FormEvent) {
-    e.preventDefault();
-    const ticker = input.trim().toUpperCase();
+  async function addTicker(raw: string) {
+    const ticker = raw.trim().toUpperCase();
     if (!ticker) return;
     setError(null);
     try {
@@ -57,13 +57,19 @@ export default function WatchlistClient() {
 
   return (
     <div>
-      <form onSubmit={handleAdd} className="flex gap-2.5">
-        <input
-          type="text"
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          addTicker(input);
+        }}
+        className="flex gap-2.5"
+      >
+        <TickerAutocompleteInput
           value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Ticker, z.B. AAPL"
-          className="flex-1 rounded-md border border-border bg-bg-panel-2 px-3 py-2.5 font-mono text-[13px] uppercase text-text outline-none focus:border-accent"
+          onChange={setInput}
+          onSelect={addTicker}
+          placeholder="Ticker oder Unternehmen…"
+          className="w-full rounded-md border border-border bg-bg-panel-2 px-3 py-2.5 font-mono text-[13px] uppercase text-text outline-none focus:border-accent"
         />
         <button
           type="submit"
