@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getFilteredSignalsCached, parseSignalsQueryParams } from "@/lib/signalsQuery";
+import { clientIp, isRateLimited } from "@/lib/rateLimit";
+
+const RATE_LIMIT_PER_MINUTE = 20;
 
 const COLUMNS = [
   "ticker",
@@ -23,6 +26,10 @@ function csvField(value: string | number | null): string {
 // /api/signals (windowDays/minAgree/minUsd/buysOnly/sortBy); no params = same defaults as the
 // dashboard.
 export async function GET(request: NextRequest) {
+  if (isRateLimited(`csv:${clientIp(request)}`, RATE_LIMIT_PER_MINUTE)) {
+    return NextResponse.json({ error: "Zu viele Anfragen" }, { status: 429, headers: { "Retry-After": "60" } });
+  }
+
   const query = parseSignalsQueryParams(request.nextUrl.searchParams);
   const signals = await getFilteredSignalsCached(query);
 

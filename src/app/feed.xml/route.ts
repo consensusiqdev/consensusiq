@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getFilteredSignalsCached, parseSignalsQueryParams } from "@/lib/signalsQuery";
 import { fmtSignalScore, fmtUsd } from "@/lib/format";
 import { SITE_NAME, SITE_URL } from "@/lib/seo";
+import { clientIp, isRateLimited } from "@/lib/rateLimit";
+
+const RATE_LIMIT_PER_MINUTE = 20;
 
 function xmlEscape(s: string): string {
   return s
@@ -18,6 +21,10 @@ const FEED_LIMIT = 50;
 // query params as /api/signals (windowDays/minAgree/minUsd/buysOnly/sortBy) so a subscribed feed
 // URL can encode a specific filter combination, same as bookmarking a dashboard URL would.
 export async function GET(request: NextRequest) {
+  if (isRateLimited(`rss:${clientIp(request)}`, RATE_LIMIT_PER_MINUTE)) {
+    return NextResponse.json({ error: "Zu viele Anfragen" }, { status: 429, headers: { "Retry-After": "60" } });
+  }
+
   const query = parseSignalsQueryParams(request.nextUrl.searchParams);
   const signals = (await getFilteredSignalsCached(query)).slice(0, FEED_LIMIT);
 
