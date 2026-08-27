@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Transaction } from "@/types/filing";
 import { fmtDate, fmtUsd } from "@/lib/format";
+import WatchButton from "@/components/ui/WatchButton";
 
 export default function TopBuysRail({
   topBuys,
@@ -66,6 +67,7 @@ export default function TopBuysRail({
                   </Link>{" "}
                   · {fmtUsd(t.valueUsd)} · {fmtDate(t.transactionDate)}
                 </span>
+                <WatchButton ticker={t.ticker} className="text-[11px] text-text-dim hover:text-accent" />
               </span>
             </div>
           ))}
