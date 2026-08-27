@@ -112,9 +112,15 @@ export default function TickerDetailModal({
       >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <div className="text-xl font-bold text-text">
-              <span className="font-mono text-accent">{ticker}</span>{" "}
-              {detail && <span className="text-text-dim">{detail.companyName}</span>}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="text-xl font-bold text-text">
+                <span className="font-mono text-accent">{ticker}</span>{" "}
+                {detail && <span className="text-text-dim">{detail.companyName}</span>}
+              </div>
+              <WatchButton
+                ticker={ticker}
+                className="shrink-0 rounded-md border border-border px-2.5 py-1 font-mono text-[12px] text-text-dim hover:border-accent hover:text-accent"
+              />
             </div>
             <div className="mt-1 flex flex-wrap gap-3 font-mono text-[11px] text-text-faint">
               <a
@@ -136,7 +142,6 @@ export default function TickerDetailModal({
               <Link href={`/company/${encodeURIComponent(ticker)}`} className="hover:text-accent hover:underline">
                 Alle Insider &amp; Positionen →
               </Link>
-              <WatchButton ticker={ticker} className="hover:text-accent hover:underline" />
             </div>
           </div>
           <button
