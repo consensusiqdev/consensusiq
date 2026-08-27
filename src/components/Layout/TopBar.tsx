@@ -42,29 +42,31 @@ export default function TopBar() {
         </Link>
         <ThemeToggle />
 
+        {/* /watchlist itself handles both states — a free, localStorage-backed watchlist with no
+            login required, or the full subscriber feature set — so the link stays the same
+            regardless of isSignedIn. Only the account control on the right changes. */}
+        <Link
+          href="/watchlist"
+          className="rounded-md border border-border px-3 py-2 font-mono text-[12.5px] text-text-dim hover:border-accent hover:text-text"
+        >
+          Watchlist
+        </Link>
+
         {isSignedIn ? (
-          <>
-            <Link
-              href="/watchlist"
-              className="rounded-md border border-border px-3 py-2 font-mono text-[12.5px] text-text-dim hover:border-accent hover:text-text"
-            >
-              Watchlist
-            </Link>
-            <div
-              className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
-              style={{ backgroundColor: "var(--bg-panel-2)", border: "1px solid var(--border)" }}
-            >
-              <UserButton
-                afterSwitchSessionUrl="/dashboard"
-                appearance={{
-                  elements: {
-                    avatarBox: "h-8 w-8",
-                    rootBox: "flex items-center justify-center",
-                  },
-                }}
-              />
-            </div>
-          </>
+          <div
+            className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+            style={{ backgroundColor: "var(--bg-panel-2)", border: "1px solid var(--border)" }}
+          >
+            <UserButton
+              afterSwitchSessionUrl="/dashboard"
+              appearance={{
+                elements: {
+                  avatarBox: "h-8 w-8",
+                  rootBox: "flex items-center justify-center",
+                },
+              }}
+            />
+          </div>
         ) : (
           <>
             <Link
