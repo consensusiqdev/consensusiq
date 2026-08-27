@@ -20,16 +20,33 @@ function normalizeTicker(raw: string): string {
 const REQUEST_DELAY_MS = 120; // shared rate limit, comfortably under SEC's ~10 req/s fair-access ceiling
 let lastRequestAt = 0;
 
-async function throttledFetch(url: string): Promise<Response> {
-  const wait = lastRequestAt + REQUEST_DELAY_MS - Date.now();
-  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-  lastRequestAt = Date.now();
+// 503/429 from EDGAR are load-shedding, not a permanent failure — verified live during a sustained
+// multi-hour backfill: dozens of consecutive 503s across unrelated accession numbers and filing
+// agents, i.e. the server rejecting this client wholesale rather than any one file being broken.
+// Without a retry, each hit permanently drops that filing (the caller's progress tracking advances
+// past it either way), so a sustained bout silently guts a whole ticker's history.
+const MAX_RETRIES = 5;
+const RETRY_BASE_DELAY_MS = 1000;
 
-  const res = await fetch(url, { headers: { "User-Agent": USER_AGENT!, Accept: "*/*" } });
-  if (!res.ok) {
-    throw new Error(`SEC-EDGAR-Anfrage fehlgeschlagen (${res.status}): ${url}`);
+async function throttledFetch(url: string): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    const wait = lastRequestAt + REQUEST_DELAY_MS - Date.now();
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    lastRequestAt = Date.now();
+
+    const res = await fetch(url, { headers: { "User-Agent": USER_AGENT!, Accept: "*/*" } });
+    if (res.ok) return res;
+
+    const isThrottling = res.status === 503 || res.status === 429;
+    if (!isThrottling || attempt >= MAX_RETRIES) {
+      throw new Error(`SEC-EDGAR-Anfrage fehlgeschlagen (${res.status}): ${url}`);
+    }
+    const backoff = RETRY_BASE_DELAY_MS * 2 ** attempt;
+    console.warn(
+      `  SEC EDGAR meldet ${res.status} (Versuch ${attempt + 1}/${MAX_RETRIES + 1}), erneut in ${backoff}ms: ${url}`
+    );
+    await new Promise((r) => setTimeout(r, backoff));
   }
-  return res;
 }
 
 const xmlParser = new XMLParser({
