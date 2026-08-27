@@ -66,12 +66,20 @@ export default function TopBar() {
             </div>
           </>
         ) : (
-          <Link
-            href="/pricing"
-            className="rounded-md bg-accent px-3.5 py-2 font-mono text-[12.5px] font-medium text-[#14100a] transition hover:brightness-110"
-          >
-            Alerts aktivieren
-          </Link>
+          <>
+            <Link
+              href="/sign-in"
+              className="rounded-md border border-border px-3 py-2 font-mono text-[12.5px] text-text-dim hover:border-accent hover:text-text"
+            >
+              Anmelden
+            </Link>
+            <Link
+              href="/pricing"
+              className="rounded-md bg-accent px-3.5 py-2 font-mono text-[12.5px] font-medium text-[#14100a] transition hover:brightness-110"
+            >
+              Alerts aktivieren
+            </Link>
+          </>
         )}
       </div>
     </header>
