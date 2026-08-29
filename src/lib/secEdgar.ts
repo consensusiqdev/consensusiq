@@ -17,6 +17,23 @@ function normalizeTicker(raw: string): string {
   return raw.trim().replace(/^\((.+)\)$/, "$1").trim();
 }
 
+// fast-xml-parser (ignoreAttributes: false) returns a plain string for a text-only element, but an
+// object ({ "#text": ..., "@_attr": ... }) the moment that same element also carries an attribute —
+// verified live: ticker CRI's 2009 Form 4 (accession 0001140361-09-023300) has this on
+// <issuerTradingSymbol>, throwing "trim is not a function" wherever a plain string was assumed.
+// Every text field read off ownershipDocument goes through this first, not just the ticker — the
+// same filing agent quirk applies to issuerName/rptOwnerName/rptOwnerCik equally, it just doesn't
+// throw there (no .trim() call), it silently writes "[object Object]" instead.
+function textValue(v: unknown): string | undefined {
+  if (typeof v === "string") return v;
+  if (typeof v === "number") return String(v);
+  if (v && typeof v === "object" && "#text" in v) {
+    const text = (v as Record<string, unknown>)["#text"];
+    return text == null ? undefined : String(text);
+  }
+  return undefined;
+}
+
 const REQUEST_DELAY_MS = 120; // shared rate limit, comfortably under SEC's ~10 req/s fair-access ceiling
 let lastRequestAt = 0;
 
@@ -235,14 +252,14 @@ export async function fetchFilingOwnershipXml(accession: Form4Accession): Promis
   const doc = parsed.ownershipDocument;
   if (!doc) return [];
 
-  const rawTicker = doc.issuer?.issuerTradingSymbol?.trim();
+  const rawTicker = textValue(doc.issuer?.issuerTradingSymbol)?.trim();
   const ticker = rawTicker ? normalizeTicker(rawTicker) : rawTicker;
-  const companyName = doc.issuer?.issuerName;
-  const rawFilerId = doc.reportingOwner?.reportingOwnerId?.rptOwnerCik;
-  const filerName = doc.reportingOwner?.reportingOwnerId?.rptOwnerName;
+  const companyName = textValue(doc.issuer?.issuerName);
+  const rawFilerId = textValue(doc.reportingOwner?.reportingOwnerId?.rptOwnerCik);
+  const filerName = textValue(doc.reportingOwner?.reportingOwnerId?.rptOwnerName);
   if (!ticker || !companyName || !rawFilerId || !filerName) return [];
-  // fast-xml-parser auto-coerces numeric-looking text to a JS number, dropping leading zeros — force back to string.
-  const filerId = String(rawFilerId).padStart(10, "0");
+  // fast-xml-parser auto-coerces numeric-looking text to a JS number, dropping leading zeros — textValue() already forced it back to a string above, padStart puts them back.
+  const filerId = rawFilerId.padStart(10, "0");
 
   const filerRoleValue = filerRole(doc.reportingOwner?.reportingOwnerRelationship);
   const isCSuite = isCSuiteTitle(doc.reportingOwner?.reportingOwnerRelationship?.officerTitle);
@@ -337,14 +354,14 @@ export async function fetchOwnershipPosition(cik: string, accessionNumber: strin
   const doc = parsed.ownershipDocument;
   if (!doc) return null;
 
-  const rawTicker = doc.issuer?.issuerTradingSymbol?.trim();
+  const rawTicker = textValue(doc.issuer?.issuerTradingSymbol)?.trim();
   const ticker = rawTicker ? normalizeTicker(rawTicker) : rawTicker;
-  const companyName = doc.issuer?.issuerName;
-  const rawFilerId = doc.reportingOwner?.reportingOwnerId?.rptOwnerCik;
-  const filerName = doc.reportingOwner?.reportingOwnerId?.rptOwnerName;
-  const asOfDate = doc.periodOfReport;
+  const companyName = textValue(doc.issuer?.issuerName);
+  const rawFilerId = textValue(doc.reportingOwner?.reportingOwnerId?.rptOwnerCik);
+  const filerName = textValue(doc.reportingOwner?.reportingOwnerId?.rptOwnerName);
+  const asOfDate = textValue(doc.periodOfReport);
   if (!ticker || !companyName || !rawFilerId || !filerName || !asOfDate) return null;
-  const filerId = String(rawFilerId).padStart(10, "0");
+  const filerId = rawFilerId.padStart(10, "0");
   const filerRoleValue = filerRole(doc.reportingOwner?.reportingOwnerRelationship);
 
   const holdings = doc.nonDerivativeTable?.nonDerivativeHolding;
