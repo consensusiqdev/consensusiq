@@ -7,27 +7,34 @@ import {
   getSavedScreensForUser,
   getSeenTickersForScreen,
   getSubscriptionStatus,
+  getTickerIndustries,
+  getTransactionsSince,
   markTickersSeenForScreen,
   type SavedScreenCriteria,
   type SavedScreenRow,
+  type TransactionRow,
 } from "@/lib/db";
-import { getFilteredSignals } from "@/lib/signalsQuery";
+import { computeFilteredSignals, getFilteredSignals, windowStartFor } from "@/lib/signalsQuery";
 import { sendScreenAlertEmail } from "@/lib/email";
 import { sendPushToUsers } from "@/lib/push";
 import type { TickerSignal } from "@/types/filing";
 
 export type { SavedScreenRow };
 
-async function matchingSignalsForScreen(row: {
-  window_days: number;
-  min_agree: number;
-  min_usd: number;
-  buys_only: number;
-  c_suite_only: number;
-  industry: string | null;
-}): Promise<TickerSignal[]> {
-  const signals = await getFilteredSignals({
-    windowDays: row.window_days,
+function matchingSignalsForScreen(
+  row: {
+    window_days: number;
+    min_agree: number;
+    min_usd: number;
+    buys_only: number;
+    c_suite_only: number;
+    industry: string | null;
+  },
+  rows: TransactionRow[],
+  windowStart: string,
+  industries: Map<string, string>
+): TickerSignal[] {
+  const signals = computeFilteredSignals(rows, windowStart, industries, {
     minAgree: row.min_agree,
     minUsd: row.min_usd,
     buysOnly: row.buys_only === 1,
@@ -37,18 +44,29 @@ async function matchingSignalsForScreen(row: {
   return row.industry ? signals.filter((s) => s.industry === row.industry) : signals;
 }
 
+/** Fetches `getTransactionsSince()` once per distinct `windowDays` across a batch of screens,
+ * instead of once per screen — most screens share the dashboard's default window. */
+async function transactionRowsByWindowDays(windowDaysValues: Iterable<number>): Promise<Map<number, TransactionRow[]>> {
+  const distinctWindowDays = [...new Set(windowDaysValues)];
+  const entries = await Promise.all(
+    distinctWindowDays.map(async (days) => [days, await getTransactionsSince(windowStartFor(days))] as const)
+  );
+  return new Map(entries);
+}
+
 /** Creates a screen and immediately seeds it with whatever currently matches, so the next ingest
  * cron check only ever alerts on genuinely NEW entries — not the screen's entire starting list. */
 export async function createScreen(clerkUserId: string, criteria: SavedScreenCriteria): Promise<number> {
   const screenId = await createSavedScreen(clerkUserId, criteria);
-  const initialMatches = await matchingSignalsForScreen({
-    window_days: criteria.windowDays,
-    min_agree: criteria.minAgree,
-    min_usd: criteria.minUsd,
-    buys_only: criteria.buysOnly ? 1 : 0,
-    c_suite_only: criteria.cSuiteOnly ? 1 : 0,
-    industry: criteria.industry,
+  const signals = await getFilteredSignals({
+    windowDays: criteria.windowDays,
+    minAgree: criteria.minAgree,
+    minUsd: criteria.minUsd,
+    buysOnly: criteria.buysOnly,
+    cSuiteOnly: criteria.cSuiteOnly,
+    sortBy: "score",
   });
+  const initialMatches = criteria.industry ? signals.filter((s) => s.industry === criteria.industry) : signals;
   await markTickersSeenForScreen(
     screenId,
     initialMatches.map((s) => s.ticker)
@@ -76,6 +94,14 @@ export async function checkSavedScreensAndAlert(): Promise<{ emailsSent: number;
   const activeScreens = allScreens.filter((s) => statusByUser.get(s.clerk_user_id) === "active");
   if (activeScreens.length === 0) return { emailsSent: 0, pushSent: 0 };
 
+  // Both DB reads below only depend on `windowDays`/nothing at all, not on any other per-screen
+  // criteria — fetched once per run (once per distinct windowDays for the rows) and reused for
+  // every screen's in-memory filtering, instead of each screen re-querying the DB from scratch.
+  const [rowsByWindowDays, industries] = await Promise.all([
+    transactionRowsByWindowDays(activeScreens.map((s) => s.window_days)),
+    getTickerIndustries(),
+  ]);
+
   const client = await clerkClient();
   let emailsSent = 0;
   // One push payload per (user, screen) pair that actually got new matches this cycle — a user
@@ -85,7 +111,10 @@ export async function checkSavedScreensAndAlert(): Promise<{ emailsSent: number;
 
   for (const screen of activeScreens) {
     try {
-      const [matches, seen] = await Promise.all([matchingSignalsForScreen(screen), getSeenTickersForScreen(screen.id)]);
+      const rows = rowsByWindowDays.get(screen.window_days) ?? [];
+      const windowStart = windowStartFor(screen.window_days);
+      const matches = matchingSignalsForScreen(screen, rows, windowStart, industries);
+      const seen = await getSeenTickersForScreen(screen.id);
       const newMatches = matches.filter((s) => !seen.has(s.ticker));
       if (newMatches.length === 0) continue;
 
