@@ -1,6 +1,11 @@
 import "server-only";
 import { cacheLife } from "next/cache";
-import { getTickerIndustries, getTotalInsiderPositionsCount, getTransactionsSince } from "@/lib/db";
+import {
+  getTickerIndustries,
+  getTotalInsiderPositionsCount,
+  getTransactionsSince,
+  type TransactionRow,
+} from "@/lib/db";
 import {
   computeConsensus,
   filterAndSortConsensus,
@@ -39,17 +44,16 @@ export function parseSignalsQueryParams(params: URLSearchParams): SignalsQueryPa
   return { windowDays, minAgree, minUsd, buysOnly, cSuiteOnly, sortBy };
 }
 
-/**
- * The ticker-consensus list only, filtered/sorted the same way as /api/signals — reused by the
- * CSV export and RSS feed, which don't need /api/signals' extra filers/topBuys/month-over-month
- * fields. Not refactored into /api/signals/route.ts itself to avoid touching a well-exercised
- * route for this; that route keeps its own (slightly larger) copy of the same filtering steps.
- */
-export async function getFilteredSignals(query: SignalsQueryParams): Promise<TickerSignal[]> {
-  const windowStart = new Date(Date.now() - query.windowDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const rows = await getTransactionsSince(windowStart);
+/** Same clamping `getFilteredSignals()` uses internally — exposed so callers that need to fetch
+ * the underlying rows themselves (screens.ts, to dedupe across screens) key their cache the same
+ * way this function would. */
+export function windowStartFor(windowDays: number): string {
+  return new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
 
-  const allTransactions: Transaction[] = rows.map((r, i) => ({
+/** Row-to-domain-object mapping shared by every caller that reads `getTransactionsSince()`. */
+export function mapTransactionRows(rows: TransactionRow[]): Transaction[] {
+  return rows.map((r, i) => ({
     id: `${r.ticker}:${r.filer_id}:${r.transaction_date}:${i}`,
     filerId: r.filer_id,
     filerType: r.filer_type as Transaction["filerType"],
@@ -72,7 +76,21 @@ export async function getFilteredSignals(query: SignalsQueryParams): Promise<Tic
     isCSuite: r.is_c_suite === 1,
     isFreshInsider: r.is_fresh_insider === 1,
   }));
+}
 
+/**
+ * The in-memory half of `getFilteredSignals()`: everything after the DB reads. Split out so
+ * screens.ts can fetch `getTransactionsSince()`/`getTickerIndustries()` once per run and reuse
+ * them across every saved screen that shares a `windowDays`, instead of each screen re-querying
+ * the DB for rows it already has.
+ */
+export function computeFilteredSignals(
+  rows: TransactionRow[],
+  windowStart: string,
+  industries: Map<string, string>,
+  query: Pick<SignalsQueryParams, "buysOnly" | "cSuiteOnly" | "minUsd" | "minAgree" | "sortBy">
+): TickerSignal[] {
+  const allTransactions = mapTransactionRows(rows);
   const openMarketOnly = allTransactions.filter(isIndependentDecision);
   const currentOpenMarket = openMarketOnly.filter((t) => t.filedDate >= windowStart);
   const sided = query.buysOnly ? currentOpenMarket.filter((t) => t.side === "BUY") : currentOpenMarket;
@@ -81,10 +99,21 @@ export async function getFilteredSignals(query: SignalsQueryParams): Promise<Tic
   const allSignals = computeConsensus(transactions, query.minUsd);
   const signals = filterAndSortConsensus(allSignals, query.minAgree, query.sortBy);
 
-  const industries = await getTickerIndustries();
   for (const s of signals) s.industry = industries.get(s.ticker) ?? null;
 
   return signals;
+}
+
+/**
+ * The ticker-consensus list only, filtered/sorted the same way as /api/signals — reused by the
+ * CSV export and RSS feed, which don't need /api/signals' extra filers/topBuys/month-over-month
+ * fields. Not refactored into /api/signals/route.ts itself to avoid touching a well-exercised
+ * route for this; that route keeps its own (slightly larger) copy of the same filtering steps.
+ */
+export async function getFilteredSignals(query: SignalsQueryParams): Promise<TickerSignal[]> {
+  const windowStart = windowStartFor(query.windowDays);
+  const [rows, industries] = await Promise.all([getTransactionsSince(windowStart), getTickerIndustries()]);
+  return computeFilteredSignals(rows, windowStart, industries, query);
 }
 
 /**
