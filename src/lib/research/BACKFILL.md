@@ -145,6 +145,19 @@ und sie von alt nach neu abarbeitet, setzt es den Wert auf die früheste tatsäc
 Meldung, und zwar nur nach unten. Betrifft das "frisch eingestiegen"-Badge; der Signal Score liest
 die Spalte nicht.
 
+## Fortschritt prüfen
+
+Beide Nachläufe loggen live pro Ticker in die Konsole — reicht meist. Für den Fall, dass das
+Terminal nicht mehr offen ist (über Nacht gelaufen, SSH-Verbindung weg, ...):
+
+```bash
+npm run research:status
+```
+
+Liest nur `insider_backfill_status`, `form4_backfill_status` und `backfill_failures`, schreibt
+nichts. Zeigt je Nachlauf fertig/in Arbeit/offen (gegen die getrackten Ticker aus `transactions`
+gezählt) sowie offene `--retry-failed`-Kandidaten.
+
 ## Danach
 
 `npm run research:prices`, dann `npm run research:backtest -- --split`. Die Datengrundlage im
