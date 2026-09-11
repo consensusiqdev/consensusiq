@@ -852,9 +852,23 @@ export async function insertIpoFiling(row: {
 
 const ipoFilingsSql = `SELECT ticker, cik, company_name, filed_date, source_url FROM ipo_filings ORDER BY filed_date DESC`;
 
-/** All recorded IPOs, newest first — small and slow-growing (genuine first-time IPOs are rare),
- * so no date-windowing or pagination yet; see the /ipos page for how these get rendered. */
+/**
+ * All recorded IPOs, newest first — small and slow-growing (genuine first-time IPOs are rare), so
+ * no date-windowing or pagination yet; see the /ipos page for how these get rendered.
+ *
+ * Deliberately tolerant of the table not existing yet: the /ipos page has no dynamic dependencies
+ * (no cookies/headers/searchParams), so Cache Components prerenders it at BUILD time — before a
+ * fresh environment has necessarily run scripts/add-ipo-filings-table.mjs yet. A hard failure here
+ * would break the production build for the entire site over one not-yet-provisioned table; an
+ * empty list just means the page correctly shows its "noch keine IPOs erfasst" state until the
+ * migration runs and the daily discovery cron has found something.
+ */
 export async function getIpoFilings(): Promise<IpoFilingRow[]> {
-  const result = await client.execute(ipoFilingsSql);
-  return result.rows as unknown as IpoFilingRow[];
+  try {
+    const result = await client.execute(ipoFilingsSql);
+    return result.rows as unknown as IpoFilingRow[];
+  } catch (err) {
+    console.warn("[db] ipo_filings nicht lesbar (Migration gelaufen? scripts/add-ipo-filings-table.mjs):", err);
+    return [];
+  }
 }
