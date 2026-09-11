@@ -6,6 +6,7 @@ import { checkAndSendDigests } from "@/lib/digest";
 import { backfillPreviousQuarterHoldings, ingestInstitutionalHoldings } from "@/lib/institutional";
 import { checkAndPostTwitterSignals } from "@/lib/twitterBot";
 import { ingestNewForm3Positions, backfillNextTicker } from "@/lib/insiderPositions";
+import { discoverNewIpos } from "@/lib/ipoDiscovery";
 
 /**
  * The 5-min cycle: real-time Form 3 (new insider) feed → Form 4 ingest → watchlist alert emails,
@@ -77,6 +78,13 @@ export async function runIngestCycle(): Promise<void> {
   } catch (err) {
     console.error("[digest] fehlgeschlagen:", err);
   }
+}
+
+/** The 24h cycle: scan SEC's cross-company 424B4 feed for genuine first-time IPOs (see
+ * ipoDiscovery.ts) — rare enough that daily is plenty, unlike the 5-min ingest cycle above. */
+export async function runIpoDiscoveryCycle(): Promise<void> {
+  const result = await discoverNewIpos();
+  console.log(`[ipos] ${result.seen} 424B4-Meldungen gesehen, ${result.recorded} neue IPOs erfasst`);
 }
 
 /** The 24h cycle: refresh the curated funds' latest 13F holdings. */
