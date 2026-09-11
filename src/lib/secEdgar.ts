@@ -138,6 +138,13 @@ export async function fetchRecentForm3Accessions(count = 100): Promise<Form4Acce
   return fetchRecentAccessions("3", count);
 }
 
+/** Same cross-company "getcurrent" feed as the Form 3/4 pollers above, filtered to 424B4 (final
+ * offering prospectus) instead — the feed for IPO discovery, since it isn't scoped to a ticker we
+ * already track (unlike fetchFilingsByForm, which needs a known ticker/CIK to even start). */
+export async function fetchRecentOfferingAccessions(count = 100): Promise<Form4Accession[]> {
+  return fetchRecentAccessions("424B4", count);
+}
+
 type IndexJson = { directory: { item: { name: string }[] } };
 
 type OwnershipXml = {
@@ -398,20 +405,38 @@ export async function fetchOwnershipPosition(cik: string, accessionNumber: strin
 type CompanyTickersJson = Record<string, { cik_str: number; ticker: string; title: string }>;
 
 let tickerCikMap: Map<string, string> | null = null;
+// CIK → {ticker, name}, built from the exact same response as tickerCikMap (one fetch feeds both
+// directions) — needed for IPO discovery, which only has a CIK from the SEC filing feed and has
+// to resolve it back to a ticker + company name to check.
+let cikTickerMap: Map<string, { ticker: string; companyName: string }> | null = null;
 let tickerCikMapLoadedAt = 0;
 const TICKER_CIK_TTL_MS = 24 * 60 * 60 * 1000;
 
-async function getCikForTicker(ticker: string): Promise<string | null> {
+async function loadTickerCikMaps(): Promise<void> {
   const now = Date.now();
-  if (!tickerCikMap || now - tickerCikMapLoadedAt > TICKER_CIK_TTL_MS) {
-    const res = await throttledFetch(`${SEC_BASE}/files/company_tickers.json`);
-    const json = (await res.json()) as CompanyTickersJson;
-    tickerCikMap = new Map(
-      Object.values(json).map((row) => [row.ticker.toUpperCase(), String(row.cik_str).padStart(10, "0")])
-    );
-    tickerCikMapLoadedAt = now;
-  }
-  return tickerCikMap.get(ticker.toUpperCase()) ?? null;
+  if (tickerCikMap && cikTickerMap && now - tickerCikMapLoadedAt <= TICKER_CIK_TTL_MS) return;
+
+  const res = await throttledFetch(`${SEC_BASE}/files/company_tickers.json`);
+  const json = (await res.json()) as CompanyTickersJson;
+  const rows = Object.values(json);
+  tickerCikMap = new Map(rows.map((row) => [row.ticker.toUpperCase(), String(row.cik_str).padStart(10, "0")]));
+  cikTickerMap = new Map(
+    rows.map((row) => [String(row.cik_str).padStart(10, "0"), { ticker: row.ticker.toUpperCase(), companyName: row.title }])
+  );
+  tickerCikMapLoadedAt = now;
+}
+
+async function getCikForTicker(ticker: string): Promise<string | null> {
+  await loadTickerCikMaps();
+  return tickerCikMap!.get(ticker.toUpperCase()) ?? null;
+}
+
+/** Reverse of getCikForTicker — resolves a CIK (from a cross-company filing feed, which only ever
+ * carries the filer's CIK, never its ticker) back to a ticker + company name. `null` for issuers
+ * with no exchange-listed ticker in SEC's own mapping (e.g. debt-only filers). */
+export async function getTickerForCik(cik: string): Promise<{ ticker: string; companyName: string } | null> {
+  await loadTickerCikMaps();
+  return cikTickerMap!.get(cik.padStart(10, "0")) ?? null;
 }
 
 type CompanyTickersExchangeJson = { fields: string[]; data: [number, string, string, string | null][] };

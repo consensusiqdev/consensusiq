@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/institutional",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/ipos",
+      "schedule": "0 7 * * *"
     }
   ]
 }

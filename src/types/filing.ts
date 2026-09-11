@@ -205,6 +205,27 @@ export type FundOverview = {
   holdings: FundHolding[];
 } | null; // null when we don't have any 13F on record yet for this fund
 
+/**
+ * One recorded first-time IPO for the /ipos page — see ipoDiscovery.ts for how "first-time" is
+ * determined (a 424B4 from a ticker with no prior transaction history at all).
+ */
+export type IpoListing = {
+  ticker: string;
+  companyName: string;
+  cik: string;
+  filedDate: string;
+  sourceUrl: string;
+  // Distinct insiders whose Form 4 BUY was flagged `nearOffering` for this ticker on/after
+  // filedDate — a coordinated IPO-directed allocation (see Transaction.nearOffering), not an
+  // independent open-market conviction buy. This is literally "did insiders subscribe to their
+  // own company's IPO", not general post-IPO insider trading activity.
+  insiderSubscriberCount: number;
+  // Whether ANY transaction is on record yet for this ticker — insiders often don't have to file
+  // for days/weeks after listing, so 0 subscribers can mean "declined to participate" or just
+  // "too early to tell". The page must show these differently.
+  hasAnyActivity: boolean;
+};
+
 export type TickerSignal = {
   ticker: string;
   companyName: string;

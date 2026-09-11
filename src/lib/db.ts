@@ -96,6 +96,17 @@ export async function getTickerHistory(ticker: string): Promise<TransactionRow[]
   return result.rows as unknown as TransactionRow[];
 }
 
+const tickerHasTransactionsSql = `SELECT 1 FROM transactions WHERE ticker = ? LIMIT 1`;
+
+/** Whether this ticker has ANY transaction on record, regardless of date — used by IPO discovery
+ * to tell a genuine first-time IPO (ticker never seen before) apart from a follow-on offering by
+ * an already-public, already-tracked company. Cheaper than getTickerHistory() since it only needs
+ * existence, not the rows themselves. */
+export async function tickerHasTransactions(ticker: string): Promise<boolean> {
+  const result = await client.execute({ sql: tickerHasTransactionsSql, args: [ticker] });
+  return result.rows.length > 0;
+}
+
 const filerTickerHistorySql = `SELECT ${COLUMNS} FROM transactions WHERE ticker = ? AND filer_id = ? ORDER BY transaction_date ASC`;
 
 /** One filer's full transaction history at one company, oldest first — every tracked code (not
@@ -810,4 +821,40 @@ const totalInsiderPositionsSql = `SELECT COUNT(*) as c FROM insider_positions`;
 export async function getTotalInsiderPositionsCount(): Promise<number> {
   const result = await client.execute(totalInsiderPositionsSql);
   return Number((result.rows[0] as unknown as { c: number }).c);
+}
+
+export type IpoFilingRow = {
+  ticker: string;
+  cik: string;
+  company_name: string;
+  filed_date: string;
+  source_url: string;
+};
+
+const insertIpoFilingSql = `INSERT OR IGNORE INTO ipo_filings (ticker, cik, company_name, filed_date, source_url, first_seen_at)
+ VALUES (?, ?, ?, ?, ?, ?)`;
+
+/** Records a genuine first-time IPO (see tickerHasTransactions() — the discovery step only calls
+ * this for a ticker that had no prior transaction history). `INSERT OR IGNORE` on the ticker
+ * primary key makes this safe to call again if the same 424B4 accession is ever seen twice. */
+export async function insertIpoFiling(row: {
+  ticker: string;
+  cik: string;
+  companyName: string;
+  filedDate: string;
+  sourceUrl: string;
+}): Promise<void> {
+  await client.execute({
+    sql: insertIpoFilingSql,
+    args: [row.ticker, row.cik, row.companyName, row.filedDate, row.sourceUrl, Date.now()],
+  });
+}
+
+const ipoFilingsSql = `SELECT ticker, cik, company_name, filed_date, source_url FROM ipo_filings ORDER BY filed_date DESC`;
+
+/** All recorded IPOs, newest first — small and slow-growing (genuine first-time IPOs are rare),
+ * so no date-windowing or pagination yet; see the /ipos page for how these get rendered. */
+export async function getIpoFilings(): Promise<IpoFilingRow[]> {
+  const result = await client.execute(ipoFilingsSql);
+  return result.rows as unknown as IpoFilingRow[];
 }
