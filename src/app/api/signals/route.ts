@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cacheLife } from "next/cache";
 import { getTickerIndustries, getTotalInsiderPositionsCount, getTransactionsSince } from "@/lib/db";
 import {
   computeConsensus,
@@ -18,6 +19,141 @@ function pick<T extends string>(value: string | null, allowed: T[], fallback: T)
   return allowed.includes(value as T) ? (value as T) : fallback;
 }
 
+type SignalsQuery = {
+  sortBy: SortOption;
+  windowDays: number;
+  minAgree: number;
+  minUsd: number;
+  buysOnly: boolean;
+  cSuiteOnly: boolean;
+};
+
+/**
+ * The actual DB-reading + computation, cached — DashboardClient refetches this on every filter
+ * change (see signalsQuery.ts's comment on getDashboardInitialData), and it was previously
+ * completely uncached, making it by far the heaviest hitter behind getTransactionsSince()'s
+ * missing-index full-table-scan problem (see scripts/add-transactions-filed-date-index.mjs).
+ * `isSubscriber` is resolved from the Clerk session by the caller, outside this cached scope
+ * (cached functions can't call auth()/read cookies themselves) and passed in as a plain argument —
+ * same technique getDashboardInitialData() already uses — so subscribers and anonymous visitors
+ * get separate cache entries and the premium enrichment never leaks between them.
+ */
+async function getCachedSignalsResponse(query: SignalsQuery, isSubscriber: boolean) {
+  "use cache";
+  cacheLife("ingestCadence");
+
+  const { sortBy, windowDays, minAgree, minUsd, buysOnly, cSuiteOnly } = query;
+  const now = new Date();
+  const windowStart = new Date(now.getTime() - windowDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  // Calendar-month boundaries for the KPI row's "vs. letzten Monat" comparison — fixed and
+  // filter-independent (unlike the windowDays-based signal list), so it reads the same no
+  // matter which Beobachtungszeitraum is selected.
+  const currentMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+    .toISOString()
+    .slice(0, 10);
+  const previousMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
+    .toISOString()
+    .slice(0, 10);
+  // Fetches everything back to the earlier of (windowStart, previousMonthStart) in one query —
+  // covers both the main signal list and the month-over-month comparison without a second round trip.
+  const fetchStart = windowStart < previousMonthStart ? windowStart : previousMonthStart;
+  const rows = await getTransactionsSince(fetchStart);
+
+  // Includes every tracked code (open-market trades + compensation-related events like grants/
+  // exercises) — only used here to build `filers`/`topBuys`/signals off the open-market subset
+  // below; the wider set exists so the premium acquisition-history lookup (queried separately,
+  // straight from the DB) has grants/exercises to find.
+  const allTransactions: Transaction[] = rows.map((r, i) => ({
+    id: `${r.ticker}:${r.filer_id}:${r.transaction_date}:${i}`,
+    filerId: r.filer_id,
+    filerType: r.filer_type as Transaction["filerType"],
+    filerName: r.filer_name,
+    filerRole: r.filer_role ?? undefined,
+    ticker: r.ticker,
+    companyName: r.company_name,
+    side: r.side as Transaction["side"],
+    transactionCode: (r.transaction_code ?? "P") as Transaction["transactionCode"],
+    shares: r.shares,
+    pricePerShare: r.price_per_share,
+    valueUsd: r.value_usd,
+    sharesOwnedAfter: r.shares_owned_after,
+    transactionDate: r.transaction_date,
+    filedDate: r.filed_date,
+    sourceUrl: r.source_url,
+    accessionNumber: "",
+    nearOffering: r.near_offering === 1,
+    isPlanTrade: r.is_plan_trade === 1,
+    isCSuite: r.is_c_suite === 1,
+    isFreshInsider: r.is_fresh_insider === 1,
+  }));
+
+  // The main consensus/signal-score computation only ever considers genuine open-market trades
+  // — grants, option exercises, tax-withholding dispositions, and gifts are not voluntary
+  // trading decisions and would just dilute the signal (see TransactionCode in types/filing.ts).
+  // Same reasoning excludes `nearOffering` trades: a "P" purchase made as part of a coordinated
+  // IPO-directed share allocation (verified real case: BRVE, 6 insiders at the identical $18.00
+  // offer price on the same day) isn't an independent conviction decision either. `isPlanTrade`
+  // trades are excluded for the same reason: a Rule 10b5-1(c) plan trade executes automatically
+  // on a pre-set schedule, not as a spontaneous decision.
+  const openMarketOnly = allTransactions.filter(isIndependentDecision);
+  const currentOpenMarket = openMarketOnly.filter((t) => t.filedDate >= windowStart);
+  const thisMonthOpenMarket = openMarketOnly.filter((t) => t.filedDate >= currentMonthStart);
+  const lastMonthOpenMarket = openMarketOnly.filter(
+    (t) => t.filedDate >= previousMonthStart && t.filedDate < currentMonthStart
+  );
+
+  // Applied after buysOnly, same "additional narrowing on request" treatment — a CEO/CFO/COO/
+  // President/Chairman buy is generally read as a stronger signal than a routine officer-level
+  // one, so this lets a visitor restrict the whole computation to just those, not just badge them.
+  const applyFilters = (txs: Transaction[]) => {
+    const sided = buysOnly ? txs.filter((t) => t.side === "BUY") : txs;
+    return cSuiteOnly ? sided.filter((t) => t.isCSuite) : sided;
+  };
+  const transactions = applyFilters(currentOpenMarket);
+  const thisMonthTransactions = applyFilters(thisMonthOpenMarket);
+  const lastMonthTransactions = applyFilters(lastMonthOpenMarket);
+
+  const filers = summarizeFilers(transactions);
+  const allSignals = computeConsensus(transactions, minUsd);
+  const signals = filterAndSortConsensus(allSignals, minAgree, sortBy);
+  const industries = await getTickerIndustries();
+  for (const s of signals) s.industry = industries.get(s.ticker) ?? null;
+  // Independent of `buysOnly` — always surfaces real purchases, even while the main list
+  // is showing sell-side consensus (buys are rarer, so this shouldn't be hidden by a filter
+  // meant for the ticker-consensus list). Uses openMarketOnly, not allTransactions — a stock
+  // grant isn't a "buy" worth highlighting here. `cSuiteOnly` DOES still apply here, unlike
+  // `buysOnly` — it's not a buy/sell-direction question, it's "whose trades count at all",
+  // so a visitor who ticked "Nur C-Suite" shouldn't see non-C-suite names in this list either.
+  const topBuys = topBuyTransactions(cSuiteOnly ? currentOpenMarket.filter((t) => t.isCSuite) : currentOpenMarket);
+
+  // Same pipeline (minUsd/minAgree/buysOnly-filtered) run on this and last calendar month —
+  // powers the KPI row's "vs. letzten Monat" delta. Only the aggregate volume is needed here,
+  // not per-ticker detail.
+  const currentMonthValueUsd = filterAndSortConsensus(
+    computeConsensus(thisMonthTransactions, minUsd),
+    minAgree,
+    sortBy
+  ).reduce((sum, s) => sum + s.totalValueAll, 0);
+  const previousMonthValueUsd = filterAndSortConsensus(
+    computeConsensus(lastMonthTransactions, minUsd),
+    minAgree,
+    sortBy
+  ).reduce((sum, s) => sum + s.totalValueAll, 0);
+
+  if (isSubscriber) {
+    await enrichSignalsWithAcquisitionHistory(signals);
+  }
+
+  return {
+    filers,
+    signals,
+    topBuys,
+    totalInsidersTracked: await getTotalInsiderPositionsCount(),
+    currentMonthValueUsd,
+    previousMonthValueUsd,
+  };
+}
+
 // Public endpoint (no auth gate) — the dashboard is free to browse; only the watchlist/alerts
 // feature (src/app/api/watchlist/route.ts) requires an active subscription. We still check
 // subscription status here, but only to decide whether to include the premium
@@ -25,125 +161,19 @@ function pick<T extends string>(value: string | null, allowed: T[], fallback: T)
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
 
-  const sortBy = pick(params.get("sortBy"), SORT_OPTIONS, "consensus");
-  const windowDays = Math.min(90, Math.max(1, parseInt(params.get("windowDays") ?? "14", 10) || 14));
-  const minAgree = Math.max(1, parseInt(params.get("minAgree") ?? "3", 10) || 3);
-  const minUsd = Math.max(0, parseFloat(params.get("minUsd") ?? "1000") || 0);
-  const buysOnly = params.get("buysOnly") !== "false";
-  const cSuiteOnly = params.get("cSuiteOnly") === "true";
+  const query: SignalsQuery = {
+    sortBy: pick(params.get("sortBy"), SORT_OPTIONS, "consensus"),
+    windowDays: Math.min(90, Math.max(1, parseInt(params.get("windowDays") ?? "14", 10) || 14)),
+    minAgree: Math.max(1, parseInt(params.get("minAgree") ?? "3", 10) || 3),
+    minUsd: Math.max(0, parseFloat(params.get("minUsd") ?? "1000") || 0),
+    buysOnly: params.get("buysOnly") !== "false",
+    cSuiteOnly: params.get("cSuiteOnly") === "true",
+  };
 
   try {
-    const now = new Date();
-    const windowStart = new Date(now.getTime() - windowDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    // Calendar-month boundaries for the KPI row's "vs. letzten Monat" comparison — fixed and
-    // filter-independent (unlike the windowDays-based signal list), so it reads the same no
-    // matter which Beobachtungszeitraum is selected.
-    const currentMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
-      .toISOString()
-      .slice(0, 10);
-    const previousMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
-      .toISOString()
-      .slice(0, 10);
-    // Fetches everything back to the earlier of (windowStart, previousMonthStart) in one query —
-    // covers both the main signal list and the month-over-month comparison without a second round trip.
-    const fetchStart = windowStart < previousMonthStart ? windowStart : previousMonthStart;
-    const rows = await getTransactionsSince(fetchStart);
-
-    // Includes every tracked code (open-market trades + compensation-related events like grants/
-    // exercises) — only used here to build `filers`/`topBuys`/signals off the open-market subset
-    // below; the wider set exists so the premium acquisition-history lookup (queried separately,
-    // straight from the DB) has grants/exercises to find.
-    const allTransactions: Transaction[] = rows.map((r, i) => ({
-      id: `${r.ticker}:${r.filer_id}:${r.transaction_date}:${i}`,
-      filerId: r.filer_id,
-      filerType: r.filer_type as Transaction["filerType"],
-      filerName: r.filer_name,
-      filerRole: r.filer_role ?? undefined,
-      ticker: r.ticker,
-      companyName: r.company_name,
-      side: r.side as Transaction["side"],
-      transactionCode: (r.transaction_code ?? "P") as Transaction["transactionCode"],
-      shares: r.shares,
-      pricePerShare: r.price_per_share,
-      valueUsd: r.value_usd,
-      sharesOwnedAfter: r.shares_owned_after,
-      transactionDate: r.transaction_date,
-      filedDate: r.filed_date,
-      sourceUrl: r.source_url,
-      accessionNumber: "",
-      nearOffering: r.near_offering === 1,
-      isPlanTrade: r.is_plan_trade === 1,
-      isCSuite: r.is_c_suite === 1,
-      isFreshInsider: r.is_fresh_insider === 1,
-    }));
-
-    // The main consensus/signal-score computation only ever considers genuine open-market trades
-    // — grants, option exercises, tax-withholding dispositions, and gifts are not voluntary
-    // trading decisions and would just dilute the signal (see TransactionCode in types/filing.ts).
-    // Same reasoning excludes `nearOffering` trades: a "P" purchase made as part of a coordinated
-    // IPO-directed share allocation (verified real case: BRVE, 6 insiders at the identical $18.00
-    // offer price on the same day) isn't an independent conviction decision either. `isPlanTrade`
-    // trades are excluded for the same reason: a Rule 10b5-1(c) plan trade executes automatically
-    // on a pre-set schedule, not as a spontaneous decision.
-    const openMarketOnly = allTransactions.filter(
-      isIndependentDecision
-    );
-    const currentOpenMarket = openMarketOnly.filter((t) => t.filedDate >= windowStart);
-    const thisMonthOpenMarket = openMarketOnly.filter((t) => t.filedDate >= currentMonthStart);
-    const lastMonthOpenMarket = openMarketOnly.filter(
-      (t) => t.filedDate >= previousMonthStart && t.filedDate < currentMonthStart
-    );
-
-    // Applied after buysOnly, same "additional narrowing on request" treatment — a CEO/CFO/COO/
-    // President/Chairman buy is generally read as a stronger signal than a routine officer-level
-    // one, so this lets a visitor restrict the whole computation to just those, not just badge them.
-    const applyFilters = (txs: Transaction[]) => {
-      const sided = buysOnly ? txs.filter((t) => t.side === "BUY") : txs;
-      return cSuiteOnly ? sided.filter((t) => t.isCSuite) : sided;
-    };
-    const transactions = applyFilters(currentOpenMarket);
-    const thisMonthTransactions = applyFilters(thisMonthOpenMarket);
-    const lastMonthTransactions = applyFilters(lastMonthOpenMarket);
-
-    const filers = summarizeFilers(transactions);
-    const allSignals = computeConsensus(transactions, minUsd);
-    const signals = filterAndSortConsensus(allSignals, minAgree, sortBy);
-    const industries = await getTickerIndustries();
-    for (const s of signals) s.industry = industries.get(s.ticker) ?? null;
-    // Independent of `buysOnly` — always surfaces real purchases, even while the main list
-    // is showing sell-side consensus (buys are rarer, so this shouldn't be hidden by a filter
-    // meant for the ticker-consensus list). Uses openMarketOnly, not allTransactions — a stock
-    // grant isn't a "buy" worth highlighting here. `cSuiteOnly` DOES still apply here, unlike
-    // `buysOnly` — it's not a buy/sell-direction question, it's "whose trades count at all",
-    // so a visitor who ticked "Nur C-Suite" shouldn't see non-C-suite names in this list either.
-    const topBuys = topBuyTransactions(cSuiteOnly ? currentOpenMarket.filter((t) => t.isCSuite) : currentOpenMarket);
-
-    // Same pipeline (minUsd/minAgree/buysOnly-filtered) run on this and last calendar month —
-    // powers the KPI row's "vs. letzten Monat" delta. Only the aggregate volume is needed here,
-    // not per-ticker detail.
-    const currentMonthValueUsd = filterAndSortConsensus(
-      computeConsensus(thisMonthTransactions, minUsd),
-      minAgree,
-      sortBy
-    ).reduce((sum, s) => sum + s.totalValueAll, 0);
-    const previousMonthValueUsd = filterAndSortConsensus(
-      computeConsensus(lastMonthTransactions, minUsd),
-      minAgree,
-      sortBy
-    ).reduce((sum, s) => sum + s.totalValueAll, 0);
-
-    if (await getActiveSubscriberId()) {
-      await enrichSignalsWithAcquisitionHistory(signals);
-    }
-
-    return NextResponse.json({
-      filers,
-      signals,
-      topBuys,
-      totalInsidersTracked: await getTotalInsiderPositionsCount(),
-      currentMonthValueUsd,
-      previousMonthValueUsd,
-    });
+    const isSubscriber = !!(await getActiveSubscriberId());
+    const result = await getCachedSignalsResponse(query, isSubscriber);
+    return NextResponse.json(result);
   } catch (err) {
     console.error("GET /api/signals failed:", err);
     const message = err instanceof Error ? err.message : "Unbekannter Fehler";
